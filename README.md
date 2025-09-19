@@ -1,1 +1,1 @@
-# noxus-sdk
+# Noxus SDK

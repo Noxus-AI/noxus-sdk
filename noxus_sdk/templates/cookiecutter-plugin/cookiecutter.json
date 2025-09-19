@@ -1,0 +1,6 @@
+{
+  "plugin_name": "my-plugin",
+  "description": "A new Noxus plugin",
+  "author_name": "Your Name",
+  "__package_name": "{{ cookiecutter.plugin_name.replace('-', '_').lower().replace(' ', '_') }}"
+}
