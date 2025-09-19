@@ -21,6 +21,7 @@ ignore = [
     "FIX002", # line-contains-todo - (Andre, David) This would override flake8-todos, we will follow flake8-todos since its more complete
     "ANN101",
     "ANN102",
+    
     # Open to discussion
     "PLR2004", # magic-value-comparison - (Andre) This should be left to the developer to decide, sometimes it makes sense for simple cases like http status codes
     "PLR0915", # too-many-statements - (Andre) This is useful to promote cleaner code, but we have way too many functions that exceed this limit, need to deal with it in the future 
