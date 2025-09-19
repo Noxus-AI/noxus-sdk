@@ -32,8 +32,7 @@ jobs:
       - name: Lint and format check
         run: |
           echo "🔍 Running ruff linter and formatter..."
-          ruff check noxus_sdk/
-          ruff format --check noxus_sdk/
+          hatch fmt
 
       - name: Run tests
         run: |
