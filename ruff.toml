@@ -1,0 +1,3 @@
+exclude = [
+  "noxus_sdk/templates/cookiecutter-plugin/**",
+]
