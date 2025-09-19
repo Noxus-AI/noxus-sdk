@@ -37,6 +37,8 @@ jobs:
         run: |
           echo "🧪 Running tests with coverage..."
           hatch test --cover
+        env:
+          NOXUS_API_KEY: ${{ secrets.NOXUS_API_KEY }}
 
       - name: Upload coverage reports
         if: matrix.python-version == '3.11'
