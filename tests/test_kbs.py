@@ -4,6 +4,7 @@ from pathlib import Path
 
 import httpx
 import pytest
+
 from noxus_sdk.client import Client
 from noxus_sdk.resources.knowledge_bases import (
     CreateDocument,

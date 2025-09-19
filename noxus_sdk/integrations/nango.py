@@ -73,7 +73,8 @@ class NangoIntegration(BaseIntegration, ABC):
     @classmethod
     @abstractmethod
     def get_provider_credentials(
-        cls, ctx: RemoteExecutionContext,
+        cls,
+        ctx: RemoteExecutionContext,
     ) -> NangoProviderCredentials:
         """Get the Nango credentials for this integration."""
         raise NotImplementedError(
@@ -107,7 +108,6 @@ class NangoIntegration(BaseIntegration, ABC):
             resp.raise_for_status()
 
             return resp.json().get("credentials", {})
-
 
     @classmethod
     async def is_connected(cls, data: dict, **kwargs) -> bool:
@@ -153,8 +153,7 @@ class NangoIntegration(BaseIntegration, ABC):
 
                 # Check if configuration needs updating
                 if any(
-                    existing_integration["credentials"].get(k) != v
-                    for k, v in integration_data["credentials"].items()
+                    existing_integration["credentials"].get(k) != v for k, v in integration_data["credentials"].items()
                 ):
                     update_response = await client.patch(
                         f"https://api.nango.dev/integrations/{cls.provider}",

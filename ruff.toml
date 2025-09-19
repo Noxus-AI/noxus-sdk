@@ -1,3 +1,59 @@
 exclude = [
   "noxus_sdk/templates/cookiecutter-plugin/**",
 ]
+
+[lint.flake8-bugbear]
+# Allow default arguments like, e.g., `data: List[str] = fastapi.Query(None)`.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query"]
+
+[lint.flake8-type-checking]
+runtime-evaluated-base-classes = ["pydantic.BaseModel", "sqlalchemy.orm.DeclarativeBase", "pydantic.PydanticDataclass"]
+runtime-evaluated-decorators = ["pydantic.dataclasses.dataclass", "fastapi.FastAPI.get", "attrs.define", "pydantic.validate_call"]
+
+[lint]
+select = ["ALL"]
+ignore = [
+    "D", # pydocstyle - (Andre, David) We won't enforce docstrings since their value is debatable
+    "EM", # flake8-errmsg - (Andre, David) The value added by this is not worth the effort
+    "G", # flake8-logging-format - (Andre, David) Same reasoning as the one above, this one a bit debatable tho
+    "E741", # ambiguous-variable-name (Andre, David) - This rule is not a real concern. Super nitpicking
+    "E731", # lambda-assignment (Andre, David) - Took one for the team, David likes to code with lambdas 😢
+    "FIX002", # line-contains-todo - (Andre, David) This would override flake8-todos, we will follow flake8-todos since its more complete
+    "ANN101",
+    "ANN102",
+    # Open to discussion
+    "PLR2004", # magic-value-comparison - (Andre) This should be left to the developer to decide, sometimes it makes sense for simple cases like http status codes
+    "PLR0915", # too-many-statements - (Andre) This is useful to promote cleaner code, but we have way too many functions that exceed this limit, need to deal with it in the future 
+    "PERF", # Perflint - (Andre) This is a bit strict and a real pain to deal with. This is low priority we can deal with it later
+    "ANN002", # missing-type-args - (Andre) Type hinting args and kwargs is not always possible and is mostly useless
+    "ANN003", # missing-type-kwargs - (Andre) Type hinting args and kwargs is not always possible and is mostly useless 
+    "TRY003", # raise-vanilla-args - (Andre) This is a bit strict, and we use this a lot in the codebase, we can deal with it in the future but for now we will ignore it
+    "PGH003", # blanket-type-ignore - (Andre) This is super strict and a real pain to deal with. This is low priority we can deal with it later
+    "E501", # line-too-long - (Andre) This is mostly a matter of taste, but we should be consistent in the future (also this can be auto-fixed 99% of the time)
+    "C901", # complex-structure - (Andre) This is useful to promote cleaner code, but we have way too many functions that exceed this limit, need to deal with it in the future
+    "PTH", # flake8-use-pathlib - (Andre) Use of os file methods is okay, we should move to pathlib but this is low priority we can deal with it later
+    "TD003", # missing-todo-link - (Andre) Would love to have this, but it's a bit strict and a real pain to deal with. And I don't think David would like it :P
+]
+
+[lint.pylint]
+max-args = 12
+
+[lint.pydocstyle]
+convention = "google"
+
+[lint.per-file-ignores]
+"**/{tests,docs,tools}/*" = [
+    "E402", # module-import-not-at-top-of-file - (Andre, David) In tests we sometimes want to import inside the test. This does not make sense in tests
+    "T201", # print - (Andre, David) The use of print is valid in tests, docs and tools
+    "S101", # assert - (Andre, David) The use of assert is valid in tests, docs and tools
+    "PLR2004", # magic-value-comparison - (Andre, David) Tests do a lot of comparisons with magic values like ret == 2 etc. This rule is just a pain to deal in tests
+
+    "ANN", # print - (Andre) The use of print is valid in tests, docs and tools
+    "BLE001",
+    "F841",
+    "TRY201",
+    "SIM",
+    "ARG",
+    "S110",
+    "ERA001"
+]

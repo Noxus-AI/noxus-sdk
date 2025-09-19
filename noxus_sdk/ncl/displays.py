@@ -311,17 +311,13 @@ class ConfigDictComplexList(BaseConfigDisplay):
 
 
 class ConfigDictComplexListStandalone(BaseConfigDisplay):
-    type: Literal["config_dict_complex_list_standalone"] = (
-        "config_dict_complex_list_standalone"  # type: ignore
-    )
+    type: Literal["config_dict_complex_list_standalone"] = "config_dict_complex_list_standalone"  # type: ignore
     subtitle: str | None = None
     keys: list[ConfigDictEntry]
 
 
 class ConfigDictListWithoutConnector(BaseConfigDisplay):
-    type: Literal["config_dict_list_without_connector"] = (
-        "config_dict_list_without_connector"  # type: ignore
-    )
+    type: Literal["config_dict_list_without_connector"] = "config_dict_list_without_connector"  # type: ignore
     key_label: str
     value_label: str
     key_prefix: str

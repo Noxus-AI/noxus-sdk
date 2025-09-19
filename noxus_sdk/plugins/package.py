@@ -36,6 +36,7 @@ def _should_include_file(file_path: Path, plugin_root: Path) -> bool:
 
     return True
 
+
 def package_plugin(plugin_path: Path, output_path: Path) -> Path:
     """Package a plugin into a tar.gz file"""
 

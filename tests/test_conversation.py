@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import httpx
 import pytest
+
 from noxus_sdk.client import Client
 from noxus_sdk.resources.conversations import (
     ConversationFile,
@@ -110,10 +111,7 @@ async def test_conversation_messages(
 
         assert len(messages) >= 1
         assert any(
-            any(
-                "Hello, world!" in part.get("content", "") for part in msg.message_parts
-            )
-            for msg in messages
+            any("Hello, world!" in part.get("content", "") for part in msg.message_parts) for msg in messages
         ), messages
 
     finally:
@@ -253,11 +251,7 @@ async def test_conversation_with_file_b64(
         await conversation.aadd_message(message)
         messages = await conversation.aget_messages()
         assert len(messages) >= 1
-        assert any(
-            "hello, world!" in part.get("content", "").lower()
-            for msg in messages
-            for part in msg.message_parts
-        )
+        assert any("hello, world!" in part.get("content", "").lower() for msg in messages for part in msg.message_parts)
 
     finally:
         await client.conversations.adelete(conversation.id)

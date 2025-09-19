@@ -16,10 +16,7 @@ class AgentFlowService(BaseService[AgentFlowDefinition]):
             page=page,
             page_size=page_size,
         )
-        return [
-            AgentFlowDefinition.model_validate({"client": self.client, **data})
-            for data in workflows_data
-        ]
+        return [AgentFlowDefinition.model_validate({"client": self.client, **data}) for data in workflows_data]
 
     def list(self, page: int = 1, page_size: int = 10) -> list[AgentFlowDefinition]:
         workflows_data = self.client.pget(
@@ -28,10 +25,7 @@ class AgentFlowService(BaseService[AgentFlowDefinition]):
             page=page,
             page_size=page_size,
         )
-        return [
-            AgentFlowDefinition.model_validate({"client": self.client, **data})
-            for data in workflows_data
-        ]
+        return [AgentFlowDefinition.model_validate({"client": self.client, **data}) for data in workflows_data]
 
     def delete(self, workflow_id: str) -> None:
         self.client.delete(f"/v1/workflows/{workflow_id}")

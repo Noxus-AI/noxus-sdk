@@ -124,9 +124,7 @@ class BaseNode(Generic[ConfigType]):
             description=cls.description,
             small_description=cls.small_description,
             documentation_url=cls.documentation_url,
-            category=cls.category.value
-            if hasattr(cls.category, "value")
-            else str(cls.category),
+            category=cls.category.value if hasattr(cls.category, "value") else str(cls.category),
             sub_category=cls.sub_category,
             example=cls.example,
             integrations=list(cls.integrations.keys()),

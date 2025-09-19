@@ -29,10 +29,7 @@ def _is_safe_path(base_path: Path, member_path: str) -> bool:
         base_path_resolved = base_path.resolve()
 
         # Check if the resolved path is within the base directory
-        return (
-            str(full_path).startswith(str(base_path_resolved) + os.sep)
-            or full_path == base_path_resolved
-        )
+        return str(full_path).startswith(str(base_path_resolved) + os.sep) or full_path == base_path_resolved
     except (OSError, ValueError):
         # If path resolution fails, consider it unsafe
         return False
@@ -42,9 +39,7 @@ def _validate_member_name(name: str) -> bool:
     """Validate archive member name for security"""
     # Check for dangerous patterns
     return not (
-        ".." in name
-        or name.startswith(("/", "\\"))
-        or (":" in name and os.name == "nt")  # Windows drive letters
+        ".." in name or name.startswith(("/", "\\")) or (":" in name and os.name == "nt")  # Windows drive letters
     )
 
 
@@ -206,19 +201,14 @@ class UploadPluginSource(PluginSource, BaseModel):
         top_level_entries = []
         for name in safe_names:
             top_part = name.split("/")[0] if "/" in name else name
-            if (
-                not top_part.startswith(("__", "."))
-                and top_part not in top_level_entries
-            ):
+            if not top_part.startswith(("__", ".")) and top_part not in top_level_entries:
                 top_level_entries.append(top_part)
 
         # Ensure target directory exists
         target_path.mkdir(parents=True, exist_ok=True)
 
         # If there's exactly one top-level directory, extract its contents
-        if len(top_level_entries) == 1 and any(
-            name.startswith(f"{top_level_entries[0]}/") for name in safe_names
-        ):
+        if len(top_level_entries) == 1 and any(name.startswith(f"{top_level_entries[0]}/") for name in safe_names):
             root_dir = top_level_entries[0]
             # Extract to temp dir first, then copy contents
             with tempfile.TemporaryDirectory() as temp_dir:

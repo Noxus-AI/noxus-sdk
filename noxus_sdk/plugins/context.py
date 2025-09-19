@@ -1,11 +1,11 @@
 """Remote execution context for plugins"""
+
 from __future__ import annotations
 
 from pydantic import BaseModel
 
 
 class RemoteExecutionContext(BaseModel):
-
     plugin_config: dict = {}
     integration_credentials: dict[str, dict] = {}
 

@@ -1,4 +1,5 @@
 import pytest
+
 from noxus_sdk.client import Client
 from noxus_sdk.workflows import ConfigError, WorkflowDefinition
 

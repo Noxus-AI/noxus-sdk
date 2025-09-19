@@ -32,10 +32,7 @@ class WorkflowService(BaseService[WorkflowDefinition]):
             page=page,
             page_size=page_size,
         )
-        return [
-            WorkflowDefinition.model_validate({"client": self.client, **data})
-            for data in workflows_data
-        ]
+        return [WorkflowDefinition.model_validate({"client": self.client, **data}) for data in workflows_data]
 
     def list(self, page: int = 1, page_size: int = 10) -> list[WorkflowDefinition]:
         workflows_data = self.client.pget(
@@ -44,10 +41,7 @@ class WorkflowService(BaseService[WorkflowDefinition]):
             page=page,
             page_size=page_size,
         )
-        return [
-            WorkflowDefinition.model_validate({"client": self.client, **data})
-            for data in workflows_data
-        ]
+        return [WorkflowDefinition.model_validate({"client": self.client, **data}) for data in workflows_data]
 
     def delete(self, workflow_id: str) -> None:
         self.client.delete(f"/v1/workflows/{workflow_id}")

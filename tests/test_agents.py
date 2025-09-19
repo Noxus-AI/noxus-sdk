@@ -2,6 +2,7 @@ from uuid import uuid4
 
 import httpx
 import pytest
+
 from noxus_sdk.client import Client
 from noxus_sdk.resources.assistants import AgentSettings
 from noxus_sdk.resources.conversations import (
@@ -235,9 +236,7 @@ async def test_agent_with_all_tool_types(client: Client):
         assert "workflow" in tool_types
 
         # Verify specific tool properties
-        workflow_tool = next(
-            tool for tool in agent.definition.tools if tool.type == "workflow"
-        )
+        workflow_tool = next(tool for tool in agent.definition.tools if tool.type == "workflow")
         assert workflow_tool.workflow_id == created_workflow.id
 
     finally:
@@ -339,9 +338,7 @@ async def test_agent_run_workflow(client: Client):
         assert "workflow" in tool_types
 
         # Verify specific tool properties
-        workflow_tool = next(
-            tool for tool in agent.definition.tools if tool.type == "workflow"
-        )
+        workflow_tool = next(tool for tool in agent.definition.tools if tool.type == "workflow")
         assert workflow_tool.workflow_id == created_workflow.id
 
         # Create conversation
@@ -362,11 +359,7 @@ async def test_agent_run_workflow(client: Client):
         assert len(messages) >= 1
 
         # Get output
-        assert any(
-            part["type"] == "function"
-            for message in messages
-            for part in message.message_parts
-        )
+        assert any(part["type"] == "function" for message in messages for part in message.message_parts)
 
     finally:
         await client.agents.adelete(agent.id)

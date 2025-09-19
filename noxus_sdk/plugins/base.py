@@ -1,4 +1,5 @@
 """Base plugin class for plugin development"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Generic, Literal, TypeVar, get_args
@@ -54,9 +55,7 @@ class BasePlugin(Generic[ConfigType]):
     endpoint: str | None = None
 
     # Internal variables (not exposed to the user)
-    _config_class: type[
-        ConfigType
-    ]  # Used for internal purposes like getting the configuration class
+    _config_class: type[ConfigType]  # Used for internal purposes like getting the configuration class
 
     def __init_subclass__(cls) -> None:
         """Set the configuration class for the plugin when the sublcass is created"""
@@ -81,7 +80,6 @@ class BasePlugin(Generic[ConfigType]):
             raise ValueError(
                 f"Plugin '{cls.name}' must provide at least one node or integration",
             )
-
 
         return PluginManifest(
             name=cls.name,

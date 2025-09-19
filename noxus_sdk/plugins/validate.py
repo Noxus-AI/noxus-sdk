@@ -36,11 +36,7 @@ def _iter_plugin_classes(module: ModuleType) -> list[type[BasePlugin]]:
     """Return BasePlugin subclasses defined in the given module."""
     plugin_classes: list[type[BasePlugin]] = []
     for _, obj in getmembers(module, isclass):
-        if (
-            issubclass(obj, BasePlugin)
-            and obj is not BasePlugin
-            and obj.__module__ == module.__name__
-        ):
+        if issubclass(obj, BasePlugin) and obj is not BasePlugin and obj.__module__ == module.__name__:
             plugin_classes.append(obj)
     return plugin_classes
 

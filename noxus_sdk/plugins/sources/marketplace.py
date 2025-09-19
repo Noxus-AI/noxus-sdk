@@ -1,4 +1,5 @@
 """Marketplace plugin source for downloading plugins from the official marketplace"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal

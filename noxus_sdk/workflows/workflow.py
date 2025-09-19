@@ -274,13 +274,9 @@ class Node(BaseModel):
         if not node_type:
             raise ValueError(f"Node type {self.type} not found")
         self.config_definition = node_type.config
-        self.inputs = [
-            NodeInput(node_id=str(self.id), name=i["name"], type=i["type"])
-            for i in node_type.inputs
-        ]
+        self.inputs = [NodeInput(node_id=str(self.id), name=i["name"], type=i["type"]) for i in node_type.inputs]
         self.outputs = [
-            NodeOutput(node_id=str(self.id), name=output["name"], type=output["type"])
-            for output in node_type.outputs
+            NodeOutput(node_id=str(self.id), name=output["name"], type=output["type"]) for output in node_type.outputs
         ]
         if not self.connector_config:
             self.connector_config = {

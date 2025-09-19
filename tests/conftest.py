@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 from filelock import FileLock
+
 from noxus_sdk.client import Client
 from noxus_sdk.resources.knowledge_bases import (
     KBConfigV3,

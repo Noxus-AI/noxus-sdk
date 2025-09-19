@@ -174,8 +174,7 @@ class Conversation(BaseResource):
 
     def iter_messages(self) -> Iterator[MessageEvent]:
         resp = self.client.event_stream(
-            f"/v1/conversations/{self.id}/events"
-            + ("?etag=" + self.etag if self.etag else ""),
+            f"/v1/conversations/{self.id}/events" + ("?etag=" + self.etag if self.etag else ""),
         )
         for event in resp:
             message = MessageEvent.model_validate_json(event.data)
@@ -189,8 +188,7 @@ class Conversation(BaseResource):
 
     async def aiter_messages(self) -> AsyncIterator[MessageEvent]:
         resp = self.client.aevent_stream(
-            f"/v1/conversations/{self.id}/events"
-            + ("?etag=" + self.etag if self.etag else ""),
+            f"/v1/conversations/{self.id}/events" + ("?etag=" + self.etag if self.etag else ""),
         )
         async for event in resp:
             message = MessageEvent.model_validate_json(event.data)
@@ -230,10 +228,7 @@ class ConversationService(BaseService[Conversation]):
             page=page,
             page_size=page_size,
         )
-        return [
-            Conversation(client=self.client, **conversation)
-            for conversation in conversations
-        ]
+        return [Conversation(client=self.client, **conversation) for conversation in conversations]
 
     def list(self, page: int = 1, page_size: int = 10) -> list[Conversation]:
         conversations = self.client.pget(
@@ -242,10 +237,7 @@ class ConversationService(BaseService[Conversation]):
             page=page,
             page_size=page_size,
         )
-        return [
-            Conversation(client=self.client, **conversation)
-            for conversation in conversations
-        ]
+        return [Conversation(client=self.client, **conversation) for conversation in conversations]
 
     def create(
         self,
@@ -253,9 +245,7 @@ class ConversationService(BaseService[Conversation]):
         settings: ConversationSettings | None = None,
         agent_id: str | None = None,
     ) -> Conversation:
-        if (settings is None and agent_id is None) or (
-            settings is not None and agent_id is not None
-        ):
+        if (settings is None and agent_id is None) or (settings is not None and agent_id is not None):
             raise ValueError("Exactly one of settings or agent_id must be provided")
 
         params = {}
@@ -278,9 +268,7 @@ class ConversationService(BaseService[Conversation]):
         settings: ConversationSettings | None = None,
         agent_id: str | None = None,
     ) -> Conversation:
-        if (settings is None and agent_id is None) or (
-            settings is not None and agent_id is not None
-        ):
+        if (settings is None and agent_id is None) or (settings is not None and agent_id is not None):
             raise ValueError("Exactly one of settings or agent_id must be provided")
 
         params = {}

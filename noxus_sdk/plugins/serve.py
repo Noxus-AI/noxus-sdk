@@ -45,9 +45,7 @@ def generate_fastapi_app(plugin_class: type[BasePlugin], plugin_name: str) -> Fa
     )
 
     node_map = {node.node_name: node for node in available_nodes}
-    integration_map = {
-        integration.name: integration for integration in available_integrations
-    }
+    integration_map = {integration.name: integration for integration in available_integrations}
 
     # Generate FastAPI app
     app = FastAPI(
@@ -173,9 +171,7 @@ def generate_fastapi_app(plugin_class: type[BasePlugin], plugin_name: str) -> Fa
         # Validate node exists
         if node_name not in node_map:
             available_node_names = list(node_map.keys())
-            error_msg = (
-                f"Node '{node_name}' not found. Available nodes: {available_node_names}"
-            )
+            error_msg = f"Node '{node_name}' not found. Available nodes: {available_node_names}"
             logger.error(error_msg)
             raise HTTPException(status_code=404, detail=error_msg)
 
@@ -215,9 +211,7 @@ def generate_fastapi_app(plugin_class: type[BasePlugin], plugin_name: str) -> Fa
 
         if node_name not in node_map:
             available_node_names = list(node_map.keys())
-            error_msg = (
-                f"Node '{node_name}' not found. Available nodes: {available_node_names}"
-            )
+            error_msg = f"Node '{node_name}' not found. Available nodes: {available_node_names}"
             logger.error(error_msg)
             raise HTTPException(status_code=404, detail=error_msg)
 
