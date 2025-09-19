@@ -5,7 +5,7 @@ description = "Software development kit to extend the Noxus platform"
 requires-python = ">=3.10"
 readme = "README.md"
 homepage = "https://noxus.ai"
-repository = "https://github.com/noxus-ai/noxus-sdk"
+repository = "https://github.com/Noxus-AI/noxus-sdk"
 keywords = ["noxus", "sdk", "plugin", "development"]
 authors = [
     { name = "Noxus Team", email = "support@noxus.ai" }
