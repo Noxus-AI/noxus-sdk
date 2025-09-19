@@ -3,13 +3,26 @@ name = "noxus-sdk"
 version = "0.1.0"
 description = "Software development kit to extend the Noxus platform"
 requires-python = ">=3.10"
+readme = "README.md"
+homepage = "https://noxus.ai"
+repository = "https://github.com/noxus-ai/noxus-sdk"
+keywords = ["noxus", "sdk", "plugin", "development"]
+authors = [
+    { name = "Noxus Team", email = "support@noxus.ai" }
+]
+classifiers = [
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
 dependencies = [
     "cookiecutter>=2.6.0",
     "fastapi>=0.116.1",
     "httpx>=0.27.0",
     "loguru>=0.7.0",
     "pydantic>=2.11.7",
-    "ruff==0.6.3",
+    "ruff>=0.6.3,<1.0",
     "semver>=3.0.4",
     "typer[all]>=0.16.0",
     "uvicorn>=0.35.0",
