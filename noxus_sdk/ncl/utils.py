@@ -13,7 +13,11 @@ def serialize_config(config_class: BaseModel) -> dict[str, Any]:
     config_fields = {}
 
     for name, value in config_class.model_fields.items():
-        _default = value.default if not isinstance(value.default, PydanticUndefinedType) else None
+        _default = (
+            value.default
+            if not isinstance(value.default, PydanticUndefinedType)
+            else None
+        )
         optional = False
         origin = get_origin(value.annotation)
         if origin is Union or origin is UnionType:
@@ -35,7 +39,10 @@ def serialize_config(config_class: BaseModel) -> dict[str, Any]:
             "accordion": (value.json_schema_extra or {}).get("accordion", None),
             "optional": optional,
             "default": _default,
-            "rules": [rule.model_dump() for rule in (value.json_schema_extra or {}).get("rules", [])],
+            "rules": [
+                rule.model_dump()
+                for rule in (value.json_schema_extra or {}).get("rules", [])
+            ],
             "visible": (value.json_schema_extra or {}).get("visible", True),
         }
 

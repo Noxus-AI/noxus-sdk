@@ -29,7 +29,10 @@ def _is_safe_path(base_path: Path, member_path: str) -> bool:
         base_path_resolved = base_path.resolve()
 
         # Check if the resolved path is within the base directory
-        return str(full_path).startswith(str(base_path_resolved) + os.sep) or full_path == base_path_resolved
+        return (
+            str(full_path).startswith(str(base_path_resolved) + os.sep)
+            or full_path == base_path_resolved
+        )
     except (OSError, ValueError):
         # If path resolution fails, consider it unsafe
         return False
@@ -37,9 +40,18 @@ def _is_safe_path(base_path: Path, member_path: str) -> bool:
 
 def _validate_member_name(name: str) -> bool:
     """Validate archive member name for security"""
-    # Check for dangerous patterns
+    # Normalize path to catch sneaky sequences
+    normalized = os.path.normpath(name)
+
     return not (
-        ".." in name or name.startswith(("/", "\\")) or (":" in name and os.name == "nt")  # Windows drive letters
+        normalized.startswith(("/", "\\"))
+        or normalized.startswith("~")
+        or normalized.startswith("..")
+        or normalized == "."
+        or normalized == ""
+        or (":" in normalized and os.name == "nt")  # Windows drive letters
+        or normalized.startswith("\\\\")  # UNC path
+        or ".." in normalized.replace("\\", "/")  # Catch traversal
     )
 
 
@@ -86,12 +98,12 @@ class UploadPluginSource(PluginSource, BaseModel):
     async def _download_file_from_platform(self) -> Path:
         """Download file from platform API using file ID"""
         platform_url = os.getenv("NOXUS_PLATFORM_URL", "http://localhost:8000")
-        # Hardcoded internal API key for plugin server authentication
-        # TODO(@andre): Replace with proper service-to-service authentication
-        api_key = os.getenv("NOXUS_PLATFORM_API_KEY", "internal-plugin-server-key-2025")
+        api_key = os.getenv("PLUGIN_SERVER_PLATFORM_KEY", None)
 
         if not api_key:
-            raise ValueError("NOXUS_PLATFORM_API_KEY environment variable is required")
+            raise ValueError(
+                "PLUGIN_SERVER_PLATFORM_KEY environment variable is required",
+            )
 
         url = f"{platform_url}/plugin-server/files/{self.file_id}"
         headers = {"X-API-Key": api_key}
@@ -201,14 +213,19 @@ class UploadPluginSource(PluginSource, BaseModel):
         top_level_entries = []
         for name in safe_names:
             top_part = name.split("/")[0] if "/" in name else name
-            if not top_part.startswith(("__", ".")) and top_part not in top_level_entries:
+            if (
+                not top_part.startswith(("__", "."))
+                and top_part not in top_level_entries
+            ):
                 top_level_entries.append(top_part)
 
         # Ensure target directory exists
         target_path.mkdir(parents=True, exist_ok=True)
 
         # If there's exactly one top-level directory, extract its contents
-        if len(top_level_entries) == 1 and any(name.startswith(f"{top_level_entries[0]}/") for name in safe_names):
+        if len(top_level_entries) == 1 and any(
+            name.startswith(f"{top_level_entries[0]}/") for name in safe_names
+        ):
             root_dir = top_level_entries[0]
             # Extract to temp dir first, then copy contents
             with tempfile.TemporaryDirectory() as temp_dir:

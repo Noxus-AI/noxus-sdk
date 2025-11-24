@@ -21,6 +21,7 @@ class SourceType(str, Enum):
     Github = "Github"
     Teams = "Teams"
     Sharepoint = "Sharepoint"
+    ServiceNow = "ServiceNow"
     Custom = "Custom"
 
     @classmethod

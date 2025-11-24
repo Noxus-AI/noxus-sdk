@@ -11,9 +11,6 @@ from noxus_sdk.plugins import (
 from noxus_sdk.schemas import (
     ValidationResult,  # noqa: TCH001 - Typer is getting messed up type checking
 )
-from noxus_sdk.utils import setup_logging
-
-setup_logging("INFO")
 
 app = typer.Typer(help="Plugin management commands")
 
@@ -28,18 +25,18 @@ def create(
     try:
         from noxus_sdk.plugins.create import create_plugin
 
-        typer.echo("🎯 Creating new plugin from the template...")
-        typer.echo("📝 Please answer the prompts to configure your plugin")
+        typer.echo("Creating new plugin from the template...")
+        typer.echo("Please answer the prompts to configure your plugin")
 
         plugin_dir = create_plugin(output_path)
 
-        typer.echo(f"\n✅ Created plugin package at {plugin_dir}")
-        typer.echo(f"📝 Edit {plugin_dir}/pyproject.toml to add dependencies")
-        typer.echo(f"🔧 Edit {plugin_dir}/__init__.py to configure your plugin")
-        typer.echo(f"🧪 Run 'noxus plugin validate --path {plugin_dir}' to validate")
+        typer.echo(f"\nCreated plugin package at {plugin_dir}")
+        typer.echo(f"Edit {plugin_dir}/pyproject.toml to add dependencies")
+        typer.echo(f"Edit {plugin_dir}/__init__.py to configure your plugin")
+        typer.echo(f"Run 'noxus plugin validate --path {plugin_dir}' to validate")
 
     except KeyboardInterrupt:
-        typer.echo("\n❌ Plugin creation cancelled", err=True)
+        typer.echo("\nPlugin creation cancelled", err=True)
         raise typer.Exit(code=1) from None
 
 
@@ -55,27 +52,27 @@ def validate(
     manifest, result = validate_plugin(Path(path))
 
     if result.errors:
-        typer.secho("❌ Validation failed with errors:", fg="red")
+        typer.secho("Validation failed with errors:", fg="red")
         for error in result.errors:
             typer.secho(f"   • {error}", fg="red")
         raise typer.Exit(code=1)
 
     if strict and result.warnings:
-        typer.secho("❌ Validation failed with warnings (strict mode):", fg="red")
+        typer.secho("Validation failed with warnings (strict mode):", fg="red")
         for warning in result.warnings:
             typer.secho(f"   • {warning}", fg="red")
         raise typer.Exit(code=1)
 
     for warning in result.warnings:
-        typer.secho(f"⚠️  {warning}", fg="yellow")
+        typer.secho(f"{warning}", fg="yellow")
 
     if manifest:
         typer.secho(
-            f"✅ Plugin '{manifest.name}' v{manifest.version} validated successfully",
+            f"Plugin '{manifest.name}' v{manifest.version} validated successfully",
             fg="green",
         )
     else:
-        typer.secho("✅ Plugin structure validated successfully", fg="green")
+        typer.secho("Plugin structure validated successfully", fg="green")
 
     return manifest, result
 
@@ -93,7 +90,7 @@ def generate_manifest(
     if not manifest or result.errors:
         raise typer.Exit(code=1)
 
-    typer.echo(f"📝 Generating manifest from {manifest.display_name}")
+    typer.echo(f"Generating manifest from {manifest.display_name}")
 
     # Convert to dict and write as JSON
     manifest_dict = manifest.model_dump()
@@ -101,7 +98,7 @@ def generate_manifest(
     with open(output_path, "w") as f:
         json.dump(manifest_dict, f, indent=2)
 
-    typer.secho(f"✅ Generated {output_path}", fg="green")
+    typer.secho(f"Generated {output_path}", fg="green")
 
     return manifest, result
 
@@ -127,11 +124,11 @@ def package(
 
     output_path = Path(output)
 
-    typer.echo(f"📦 Packaging {manifest.display_name} v{manifest.version}...")
+    typer.echo(f"Packaging {manifest.display_name} v{manifest.version}...")
 
     package_plugin(plugin_path, output_path)
 
-    typer.secho(f"✅ Plugin packaged as {output_path}", fg="green")
+    typer.secho(f"Plugin packaged as {output_path}", fg="green")
     return output_path
 
 

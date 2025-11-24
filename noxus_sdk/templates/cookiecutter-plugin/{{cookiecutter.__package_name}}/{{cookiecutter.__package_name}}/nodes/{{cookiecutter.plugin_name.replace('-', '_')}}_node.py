@@ -26,7 +26,9 @@ class ExampleNode(BaseNode[ExampleNodeConfiguration]):
     outputs = [
         Connector(name="result", label="Sum", definition=TypeDefinition(data_type=DataType.str)),
     ]
-
+{% if cookiecutter.include_integration == 'yes' %}
+    integrations = {"{{ cookiecutter.__package_name }}": ["all"]}
+{% endif %}
     node_name = "ExampleNode"
     title = "Example node"
     description = "An example node that performs an operation on two numbers."
@@ -34,6 +36,12 @@ class ExampleNode(BaseNode[ExampleNodeConfiguration]):
 
     async def call(self, ctx: RemoteExecutionContext, a: str, b: str):
         """Return the sum of configuration values a and b as a string."""
+{% if cookiecutter.include_integration == 'yes' %}
+        integration_credentials = ctx.get_integration_credentials(
+            "{{ cookiecutter.__package_name }}"
+        )
+        example_parameter = integration_credentials.get("example_parameter", "")
+{% endif %}
         a_int, b_int = int(a), int(b)
 
         if self.config.operation == "Add":

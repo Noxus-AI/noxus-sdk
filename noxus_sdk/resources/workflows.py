@@ -1,14 +1,14 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 from noxus_sdk.resources.base import BaseResource, BaseService
 from noxus_sdk.workflows import WorkflowDefinition
 
 if TYPE_CHECKING:
     import builtins
-    from datetime import datetime
-    from uuid import UUID
 
 
 class WorkflowVersion(BaseResource):
@@ -32,7 +32,10 @@ class WorkflowService(BaseService[WorkflowDefinition]):
             page=page,
             page_size=page_size,
         )
-        return [WorkflowDefinition.model_validate({"client": self.client, **data}) for data in workflows_data]
+        return [
+            WorkflowDefinition.model_validate({"client": self.client, **data})
+            for data in workflows_data
+        ]
 
     def list(self, page: int = 1, page_size: int = 10) -> list[WorkflowDefinition]:
         workflows_data = self.client.pget(
@@ -41,7 +44,10 @@ class WorkflowService(BaseService[WorkflowDefinition]):
             page=page,
             page_size=page_size,
         )
-        return [WorkflowDefinition.model_validate({"client": self.client, **data}) for data in workflows_data]
+        return [
+            WorkflowDefinition.model_validate({"client": self.client, **data})
+            for data in workflows_data
+        ]
 
     def delete(self, workflow_id: str) -> None:
         self.client.delete(f"/v1/workflows/{workflow_id}")

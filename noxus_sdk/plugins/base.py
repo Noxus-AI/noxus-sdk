@@ -55,7 +55,9 @@ class BasePlugin(Generic[ConfigType]):
     endpoint: str | None = None
 
     # Internal variables (not exposed to the user)
-    _config_class: type[ConfigType]  # Used for internal purposes like getting the configuration class
+    _config_class: type[
+        ConfigType
+    ]  # Used for internal purposes like getting the configuration class
 
     def __init_subclass__(cls) -> None:
         """Set the configuration class for the plugin when the sublcass is created"""
@@ -93,7 +95,9 @@ class BasePlugin(Generic[ConfigType]):
             image=cls.image,
             endpoint=cls.endpoint,
             nodes=[node.get_definition() for node in provided_nodes],
-            integrations=[integration.get_definition() for integration in provided_integrations],
+            integrations=[
+                integration.get_definition() for integration in provided_integrations
+            ],
         )
 
     # Methods to override

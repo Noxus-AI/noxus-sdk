@@ -57,7 +57,9 @@ class SetsConnectorTypeAndKeys(BaseRule):
 
 
 class SetsConnectorOrConfigVisibility(BaseRule):
-    type: Literal["sets_connector_or_config_visibility"] = "sets_connector_or_config_visibility"  # type: ignore
+    type: Literal["sets_connector_or_config_visibility"] = (
+        "sets_connector_or_config_visibility"  # type: ignore
+    )
 
 
 class TypeAndKeysSetBy(BaseRule):

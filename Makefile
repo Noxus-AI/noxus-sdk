@@ -13,27 +13,27 @@ help:
 
 # Lint the code
 lint:
-	@echo "🔍 Running ruff linter..."
+	@echo "Running ruff linter..."
 	ruff check noxus_sdk/
 
 # Format the code
 format:
-	@echo "🎨 Running ruff formatter..."
+	@echo "Running ruff formatter..."
 	ruff format noxus_sdk/
 
 # Check both linting and formatting
 check: lint format
-	@echo "✅ All checks passed!"
+	@echo "All checks passed!"
 
 # Fix linting and formatting issues automatically
 fix:
-	@echo "🔧 Fixing code issues..."
+	@echo "Fixing code issues..."
 	ruff check --fix noxus_sdk/
 	ruff format noxus_sdk/
 
 # Clean build artifacts
 clean:
-	@echo "🧹 Cleaning build artifacts..."
+	@echo "Cleaning build artifacts..."
 	rm -rf build/
 	rm -rf dist/
 	rm -rf *.egg-info/
@@ -44,14 +44,14 @@ clean:
 
 # Install in development mode
 install:
-	@echo "📦 Installing in development mode..."
-	pip install -e .
+	@echo "Installing in development mode..."
+	uv pip install -e .
 
 # Install development dependencies
 dev-install:
-	@echo "📦 Installing development dependencies..."
-	pip install -e ".[dev]"
+	@echo "Installing development dependencies..."
+	uv pip install -e ".[dev]"
 
 test:
-	@echo "🧪 Running tests..."
+	@echo "Running tests..."
 	pytest --cov=noxus_sdk --cov-report=term-missing --cov-report=html -n auto

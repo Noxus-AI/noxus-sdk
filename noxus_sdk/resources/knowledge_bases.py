@@ -364,7 +364,10 @@ class KnowledgeBaseService(BaseService[KnowledgeBase]):
             page=page,
             page_size=page_size,
         )
-        return [KnowledgeBase(client=self.client, **knowledge_base) for knowledge_base in knowledge_bases]
+        return [
+            KnowledgeBase(client=self.client, **knowledge_base)
+            for knowledge_base in knowledge_bases
+        ]
 
     async def alist(
         self,
@@ -377,7 +380,10 @@ class KnowledgeBaseService(BaseService[KnowledgeBase]):
             page=page,
             page_size=page_size,
         )
-        return [KnowledgeBase(client=self.client, **knowledge_base) for knowledge_base in knowledge_bases]
+        return [
+            KnowledgeBase(client=self.client, **knowledge_base)
+            for knowledge_base in knowledge_bases
+        ]
 
     def get(self, knowledge_base_id: str) -> KnowledgeBase:
         knowledge_base = self.client.get(f"/v1/knowledge-bases/{knowledge_base_id}")

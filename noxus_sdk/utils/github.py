@@ -26,7 +26,9 @@ def parse_github_url(repo_url: str) -> tuple[str, str]:
         parts = repo_url.split(":")[-1].replace(".git", "").split("/")
     else:
         # https://github.com/owner/repo -> owner/repo
-        parts = repo_url.replace("https://github.com/", "").replace(".git", "").split("/")
+        parts = (
+            repo_url.replace("https://github.com/", "").replace(".git", "").split("/")
+        )
 
     if len(parts) >= 2:
         return parts[0], parts[1]

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import inspect
 import socket
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, cast
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -27,6 +27,49 @@ if TYPE_CHECKING:
     from noxus_sdk.plugins import BasePlugin
 
 
+# Exception handler configuration: (status_code, error_message, detail_extractor)
+EXCEPTION_HANDLERS: dict[
+    type[Exception], tuple[int, str, Callable[[Exception], str | list]],
+] = {
+    ValueError: (400, "Bad Request", str),
+    ValidationError: (
+        422,
+        "Validation Error",
+        lambda e: cast(ValidationError, e).errors(),
+    ),
+    PluginValidationError: (400, "Plugin Validation Error", str),
+    Exception: (500, "Internal Server Error", lambda _: "An unexpected error occurred"),
+}
+
+
+def _register_exception_handlers(app: FastAPI) -> None:
+    """Register exception handlers from EXCEPTION_HANDLERS configuration"""
+
+    def create_handler(
+        exc_type: type[Exception],
+        status_code: int,
+        error_message: str,
+        detail_extractor: Callable[[Exception], str | list],
+    ):
+        async def handler(_: Request, exc: Exception) -> JSONResponse:
+            logger.error(f"{exc_type.__name__}: {exc}")
+            detail = detail_extractor(exc)
+            return JSONResponse(
+                status_code=status_code,
+                content={"error": error_message, "detail": detail},
+            )
+
+        return handler
+
+    for exc_type, (
+        status_code,
+        error_message,
+        detail_extractor,
+    ) in EXCEPTION_HANDLERS.items():
+        handler = create_handler(exc_type, status_code, error_message, detail_extractor)
+        app.add_exception_handler(exc_type, handler)
+
+
 def generate_fastapi_app(plugin_class: type[BasePlugin], plugin_name: str) -> FastAPI:
     """Generates a FastAPI app for a plugin"""
 
@@ -45,7 +88,9 @@ def generate_fastapi_app(plugin_class: type[BasePlugin], plugin_name: str) -> Fa
     )
 
     node_map = {node.node_name: node for node in available_nodes}
-    integration_map = {integration.name: integration for integration in available_integrations}
+    integration_map = {
+        integration.type: integration for integration in available_integrations
+    }
 
     # Generate FastAPI app
     app = FastAPI(
@@ -53,47 +98,8 @@ def generate_fastapi_app(plugin_class: type[BasePlugin], plugin_name: str) -> Fa
         description=f"API server for {plugin_name} plugin",
     )
 
-    # Error handling
-    @app.exception_handler(ValueError)
-    async def value_error_handler(_: Request, exc: ValueError) -> JSONResponse:
-        logger.error(f"ValueError: {exc}")
-        return JSONResponse(
-            status_code=400,
-            content={"error": "Bad Request", "detail": str(exc)},
-        )
-
-    @app.exception_handler(ValidationError)
-    async def validation_error_handler(
-        _: Request,
-        exc: ValidationError,
-    ) -> JSONResponse:
-        logger.error(f"ValidationError: {exc}")
-        return JSONResponse(
-            status_code=422,
-            content={"error": "Validation Error", "detail": exc.errors()},
-        )
-
-    @app.exception_handler(PluginValidationError)
-    async def plugin_validation_error_handler(
-        _: Request,
-        exc: PluginValidationError,
-    ) -> JSONResponse:
-        logger.error(f"PluginValidationError: {exc}")
-        return JSONResponse(
-            status_code=400,
-            content={"error": "Plugin Validation Error", "detail": str(exc)},
-        )
-
-    @app.exception_handler(Exception)
-    async def general_exception_handler(_: Request, exc: Exception) -> JSONResponse:
-        logger.error(f"Unexpected error: {exc}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": "Internal Server Error",
-                "detail": "An unexpected error occurred",
-            },
-        )
+    # Register exception handlers
+    _register_exception_handlers(app)
 
     # =============================================================================
     # SYSTEM ENDPOINTS
@@ -171,7 +177,9 @@ def generate_fastapi_app(plugin_class: type[BasePlugin], plugin_name: str) -> Fa
         # Validate node exists
         if node_name not in node_map:
             available_node_names = list(node_map.keys())
-            error_msg = f"Node '{node_name}' not found. Available nodes: {available_node_names}"
+            error_msg = (
+                f"Node '{node_name}' not found. Available nodes: {available_node_names}"
+            )
             logger.error(error_msg)
             raise HTTPException(status_code=404, detail=error_msg)
 
@@ -211,7 +219,9 @@ def generate_fastapi_app(plugin_class: type[BasePlugin], plugin_name: str) -> Fa
 
         if node_name not in node_map:
             available_node_names = list(node_map.keys())
-            error_msg = f"Node '{node_name}' not found. Available nodes: {available_node_names}"
+            error_msg = (
+                f"Node '{node_name}' not found. Available nodes: {available_node_names}"
+            )
             logger.error(error_msg)
             raise HTTPException(status_code=404, detail=error_msg)
 
@@ -239,9 +249,30 @@ def generate_fastapi_app(plugin_class: type[BasePlugin], plugin_name: str) -> Fa
             raise HTTPException(status_code=404, detail=error_msg)
 
         integration_class = integration_map[integration_name]
-        result = await integration_class.get_config(ctx)
+        result = integration_class.get_config()
         logger.info(
             f"Successfully retrieved configuration for integration: {integration_name}",
+        )
+        return result
+
+    @app.post("/integrations/{integration_name}/ready")
+    async def check_integration_ready(
+        integration_name: str,
+        creds: dict | None,
+    ) -> bool:
+        """Check if integration is ready"""
+        logger.info(f"Checking readiness for integration: {integration_name}")
+
+        if integration_name not in integration_map:
+            available_integrations = list(integration_map.keys())
+            error_msg = f"Integration '{integration_name}' not found. Available integrations: {available_integrations}"
+            logger.error(error_msg)
+            raise HTTPException(status_code=404, detail=error_msg)
+
+        integration_class = integration_map[integration_name]
+        result = await integration_class.is_ready(creds)
+        logger.info(
+            f"Successfully checked readiness for integration: {integration_name} (Ready: {result})",
         )
         return result
 
@@ -291,6 +322,7 @@ def serve_plugin(
 
     if print_port:
         # Print port information for parent process to read
+        # The Plugin server will parse stdout and find the port, this has to be in this exact format
         print(f"PLUGIN_PORT:{actual_port}", flush=True)  # noqa: T201 - required for plugin server to read the port
 
     config = Config(

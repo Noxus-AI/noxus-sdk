@@ -1,0 +1,26 @@
+from typing import ClassVar
+
+from noxus_sdk.integrations import BaseIntegration, BaseCredentials
+from noxus_sdk.ncl import ConfigText, Parameter
+
+
+class {{ cookiecutter.__package_name.replace('-', ' ').title().replace(' ', '') }}Credentials(BaseCredentials):
+    type: ClassVar[str] = "{{ cookiecutter.__package_name }}"
+
+    example_parameter: str = Parameter(
+        default="",
+        display=ConfigText(
+            label="Example Parameter",
+            placeholder="E.g. 1234567890",
+        ),
+    )
+
+
+class {{ cookiecutter.__package_name.replace('-', ' ').title().replace(' ', '') }}Integration(BaseIntegration[{{ cookiecutter.__package_name.replace('-', ' ').title().replace(' ', '') }}Credentials]):
+    display_name: str = "{{ cookiecutter.plugin_name }}"
+    image: str = (
+        "https://storage.googleapis.com/image-storage-spot-manual/app/noxus-o.svg"
+    )
+    key: str = "{{ cookiecutter.__package_name }}"
+    authorized: bool = False
+

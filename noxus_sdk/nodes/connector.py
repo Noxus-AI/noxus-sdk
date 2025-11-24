@@ -56,7 +56,9 @@ class DataContainer(Generic[ValueType]):
         return DataContainer(definition=self.definition, value=deepcopy(self.value))
 
     def is_list(self) -> bool:
-        return isinstance(self.value, list) and self.definition.data_type != DataType.list
+        return (
+            isinstance(self.value, list) and self.definition.data_type != DataType.list
+        )
 
     def dim(self) -> int:
         return 1 if not self.is_list() else len(self.value)
@@ -124,7 +126,10 @@ class VariableTypeSizeConnectorParams(ConnectorParams):
 
 
 PossibleConnectorParams = (
-    VariableTypeSizeConnectorParams | VariableConnectorParams | VariableTypeConnectorParams | ConnectorParams
+    VariableTypeSizeConnectorParams
+    | VariableConnectorParams
+    | VariableTypeConnectorParams
+    | ConnectorParams
 )
 
 
@@ -283,7 +288,11 @@ class RelativeAddress:
     _cache: dict = Field(default_factory=dict, init=False, repr=False, exclude=True)
 
     def __post_init__(self) -> None:
-        self._cache["resolve"] = f"{self.connector_name}::{self.key}" if self.key else f"{self.connector_name}"
+        self._cache["resolve"] = (
+            f"{self.connector_name}::{self.key}"
+            if self.key
+            else f"{self.connector_name}"
+        )
         self._cache["hash"] = hash(self._cache["resolve"])
 
     def __hash__(self) -> int:

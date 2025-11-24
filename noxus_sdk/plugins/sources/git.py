@@ -49,7 +49,9 @@ class GitPluginSource(PluginSource, BaseModel):
         if not is_github_repo(self.repo_url):
             raise ValueError("GitHub API method only works with GitHub repositories")
 
-        manifest_path = f"{self.path}/{MANIFEST_FILENAME}" if self.path else MANIFEST_FILENAME
+        manifest_path = (
+            f"{self.path}/{MANIFEST_FILENAME}" if self.path else MANIFEST_FILENAME
+        )
 
         manifest_data = await get_file_content(
             self.repo_url,

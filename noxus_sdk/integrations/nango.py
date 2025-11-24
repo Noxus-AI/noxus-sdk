@@ -153,7 +153,8 @@ class NangoIntegration(BaseIntegration, ABC):
 
                 # Check if configuration needs updating
                 if any(
-                    existing_integration["credentials"].get(k) != v for k, v in integration_data["credentials"].items()
+                    existing_integration["credentials"].get(k) != v
+                    for k, v in integration_data["credentials"].items()
                 ):
                     update_response = await client.patch(
                         f"https://api.nango.dev/integrations/{cls.provider}",
@@ -178,6 +179,10 @@ class NangoIntegration(BaseIntegration, ABC):
 
     def connect(self, config: dict) -> None:
         """Connect to the integration"""
+        self.config = config
+
+    def update_config(self, config: dict) -> None:
+        """Update the config of the integration"""
         self.config = config
 
     def disconnect(self) -> None:

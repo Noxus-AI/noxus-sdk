@@ -192,7 +192,7 @@ class Node(BaseModel):
             if key not in connector_keys:
                 connector_keys.append(key)
             if _input.type == "variable_type_size_connector":
-                if type_definition is not None:
+                if type_definition is None:
                     raise ValueError(
                         f"type_definition is required for variable_type_size_connector ({self.type}.{name})",
                     )
@@ -246,7 +246,7 @@ class Node(BaseModel):
             if key not in connector_keys:
                 connector_keys.append(key)
             if output.type == "variable_type_size_connector":
-                if type_definition is not None:
+                if type_definition is None:
                     raise ValueError(
                         f"type_definition is required for variable_type_size_connector ({self.type}.{name})",
                     )
@@ -274,9 +274,13 @@ class Node(BaseModel):
         if not node_type:
             raise ValueError(f"Node type {self.type} not found")
         self.config_definition = node_type.config
-        self.inputs = [NodeInput(node_id=str(self.id), name=i["name"], type=i["type"]) for i in node_type.inputs]
+        self.inputs = [
+            NodeInput(node_id=str(self.id), name=i["name"], type=i["type"])
+            for i in node_type.inputs
+        ]
         self.outputs = [
-            NodeOutput(node_id=str(self.id), name=output["name"], type=output["type"]) for output in node_type.outputs
+            NodeOutput(node_id=str(self.id), name=output["name"], type=output["type"])
+            for output in node_type.outputs
         ]
         if not self.connector_config:
             self.connector_config = {
@@ -291,7 +295,7 @@ class Node(BaseModel):
         for key, value in kwargs.items():
             if key not in self.config_definition:
                 raise ConfigError(
-                    f"Invalid config key: {key} (possible: {[k for k,v in self.config_definition.items() if v.visible]})",
+                    f"Invalid config key: {key} (possible: {[k for k, v in self.config_definition.items() if v.visible]})",
                 )
             self.config_definition[key].check_value(key, value)
             self.node_config[key] = value

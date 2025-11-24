@@ -12,7 +12,9 @@ if TYPE_CHECKING:
 
 # Constants
 ADVANCED_ACCORDION = "Advanced options"
-CONFIGURATION_TAB: Literal["Configuration", "Safety", "Human", "Model"] = "Configuration"
+CONFIGURATION_TAB: Literal["Configuration", "Safety", "Human", "Model"] = (
+    "Configuration"
+)
 MODEL_TAB: Literal["Configuration", "Safety", "Human", "Model"] = "Model"
 SAFETY_TAB: Literal["Configuration", "Safety", "Human", "Model"] = "Safety"
 HUMAN_TAB: Literal["Configuration", "Safety", "Human", "Model"] = "Human"

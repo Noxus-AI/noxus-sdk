@@ -112,6 +112,20 @@ class ConfigChipsSelect(BaseConfigDisplay):
     can_wrap: bool = True
 
 
+class ConfigMenuSelect(BaseConfigDisplay):
+    type: Literal["menu_select"] = "menu_select"  # type: ignore
+    values: list[Any]
+    button_label: str | None = None
+    button_variant: Literal[
+        "default", "destructive", "outline", "secondary", "ghost", "link",
+    ] = "default"
+    button_size: Literal["default", "sm", "lg", "icon"] = "default"
+    button_icon: str | None = None
+    needs_confirmation: bool = False
+    confirmation_message: str | None = None
+    is_horizontal: bool = False
+
+
 class ConfigMultiSelect(BaseConfigDisplay):
     type: Literal["multi_select"] = "multi_select"  # type: ignore
     values: list[Any]
@@ -144,6 +158,14 @@ class ConfigUserSelector(BaseConfigDisplay):
     type: Literal["user_selector"] = "user_selector"  # type: ignore
     label: str = ""
     placeholder: str | None = None
+
+
+class ConfigColorSelect(BaseConfigDisplay):
+    type: Literal["color_selector"] = "color_selector"  # type: ignore
+    values: list[str]
+    has_custom_color: bool | None = None
+    is_big: bool | None = False
+    preview: str | None = None
 
 
 # ========================================
@@ -266,10 +288,6 @@ class ConfigRichTextVariablesAI(BaseConfigDisplay):
         return text_template
 
 
-class ConfigTextArray(BaseConfigDisplay):
-    type: Literal["text_array"] = "text_array"  # type: ignore
-
-
 class ConfigOutputSelector(BaseConfigDisplay):
     type: Literal["output_selector"] = "output_selector"  # type: ignore
     connector_name: str
@@ -311,13 +329,17 @@ class ConfigDictComplexList(BaseConfigDisplay):
 
 
 class ConfigDictComplexListStandalone(BaseConfigDisplay):
-    type: Literal["config_dict_complex_list_standalone"] = "config_dict_complex_list_standalone"  # type: ignore
+    type: Literal["config_dict_complex_list_standalone"] = (
+        "config_dict_complex_list_standalone"  # type: ignore
+    )
     subtitle: str | None = None
     keys: list[ConfigDictEntry]
 
 
 class ConfigDictListWithoutConnector(BaseConfigDisplay):
-    type: Literal["config_dict_list_without_connector"] = "config_dict_list_without_connector"  # type: ignore
+    type: Literal["config_dict_list_without_connector"] = (
+        "config_dict_list_without_connector"  # type: ignore
+    )
     key_label: str
     value_label: str
     key_prefix: str
@@ -450,6 +472,7 @@ AnyConfigDisplay = Annotated[
     | ConfigEnumSlider
     | ConfigCoworkerSelect
     | ConfigUserSelector
+    | ConfigColorSelect
     | ConfigModelSelect
     | ConfigModelToggle
     | ConfigProviderModelToggle
@@ -460,7 +483,6 @@ AnyConfigDisplay = Annotated[
     | ConfigBigText
     | ConfigRichTextVariables
     | ConfigRichTextVariablesAI
-    | ConfigTextArray
     | ConfigOutputSelector
     | ConfigVariableInputValue
     | ConfigDisplayDict
