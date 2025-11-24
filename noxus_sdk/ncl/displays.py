@@ -117,7 +117,12 @@ class ConfigMenuSelect(BaseConfigDisplay):
     values: list[Any]
     button_label: str | None = None
     button_variant: Literal[
-        "default", "destructive", "outline", "secondary", "ghost", "link",
+        "default",
+        "destructive",
+        "outline",
+        "secondary",
+        "ghost",
+        "link",
     ] = "default"
     button_size: Literal["default", "sm", "lg", "icon"] = "default"
     button_icon: str | None = None

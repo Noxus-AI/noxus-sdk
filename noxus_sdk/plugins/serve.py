@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import inspect
 import socket
-from typing import TYPE_CHECKING, Callable, cast
+from typing import TYPE_CHECKING, Any, Callable, Coroutine, cast
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -29,7 +29,8 @@ if TYPE_CHECKING:
 
 # Exception handler configuration: (status_code, error_message, detail_extractor)
 EXCEPTION_HANDLERS: dict[
-    type[Exception], tuple[int, str, Callable[[Exception], str | list]],
+    type[Exception],
+    tuple[int, str, Callable[[Exception], str | list]],
 ] = {
     ValueError: (400, "Bad Request", str),
     ValidationError: (
@@ -50,7 +51,7 @@ def _register_exception_handlers(app: FastAPI) -> None:
         status_code: int,
         error_message: str,
         detail_extractor: Callable[[Exception], str | list],
-    ):
+    ) -> Callable[[Request, Exception], Coroutine[Any, Any, JSONResponse]]:
         async def handler(_: Request, exc: Exception) -> JSONResponse:
             logger.error(f"{exc_type.__name__}: {exc}")
             detail = detail_extractor(exc)
@@ -237,7 +238,7 @@ def generate_fastapi_app(plugin_class: type[BasePlugin], plugin_name: str) -> Fa
     @app.post("/integrations/{integration_name}/config")
     async def get_integration_config(
         integration_name: str,
-        ctx: RemoteExecutionContext,
+        _: RemoteExecutionContext,
     ) -> dict:
         """Get integration configuration"""
         logger.info(f"Getting configuration for integration: {integration_name}")
