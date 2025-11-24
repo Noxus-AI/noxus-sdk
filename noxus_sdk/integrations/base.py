@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, ClassVar, Generic, Type, TypeVar, get_args
+from typing import Any, ClassVar, Generic, TypeVar, get_args
 
 from pydantic import BaseModel
 
@@ -27,7 +27,7 @@ class BaseIntegration(Generic[CredentialsType]):
     visible: bool = True
     scopes: list[str] | None = None  # Will be set to an empty list if not set
     properties: dict[str, str] | None = None  # Will be set to an empty dict if not set
-    credentials_class: Type[CredentialsType]
+    credentials_class: type[CredentialsType]
     plugin_id: str | None = (
         None  # ID of the plugin that this integration belongs to (None for integrations that don't come from a plugin)
     )
@@ -35,7 +35,7 @@ class BaseIntegration(Generic[CredentialsType]):
         None  # Name of the plugin that this integration belongs to (None for integrations that don't come from a plugin)
     )
 
-    def __init_subclass__(cls, **kwargs):
+    def __init_subclass__(cls, **kwargs) -> None:
         super().__init_subclass__(**kwargs)
 
         cls.credentials_class = get_args(cls.__orig_bases__[0])[0]  # type: ignore
@@ -61,7 +61,7 @@ class BaseIntegration(Generic[CredentialsType]):
             # so for backwards compatibility of any new credential that is migrated
             # we load from both sides
             return cls.credentials_class(**creds, **creds.get("data", {}))
-        except Exception:
+        except Exception:  # noqa: BLE001 - We don't want to raise an error here
             return None
 
     @classmethod
@@ -76,11 +76,10 @@ class BaseIntegration(Generic[CredentialsType]):
     @classmethod
     def get_config(cls) -> dict:
         """Get the config of the integration"""
-        config = serialize_config(cls.credentials_class)
-        return config
+        return serialize_config(cls.credentials_class)
 
     @classmethod
-    def override_visible(cls, feature_flags: Any) -> bool:
+    def override_visible(cls, feature_flags: Any) -> bool:  # noqa: ARG003, ANN401 - Here for documentation purposes
         """Override the visible of the integration"""
 
         # Feature flags are a object of type FeatureFlags, but we cant type it here because its outside the scope of this package
