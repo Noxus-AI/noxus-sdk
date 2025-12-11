@@ -54,7 +54,12 @@ class Run(BaseResource):
         *,
         output_only: bool = False,
     ) -> Run | dict | None:
-        while self.status not in ["failed", "completed", "awaiting_human_feedback"]:
+        while self.status not in [
+            "failed",
+            "completed",
+            "awaiting_human_feedback",
+            "awaiting_event",
+        ]:
             time.sleep(interval)
             self.refresh()
 
@@ -71,7 +76,12 @@ class Run(BaseResource):
         *,
         output_only: bool = False,
     ) -> Run | dict | None:
-        while self.status not in ["failed", "completed", "awaiting_human_feedback"]:
+        while self.status not in [
+            "failed",
+            "completed",
+            "awaiting_human_feedback",
+            "awaiting_event",
+        ]:
             await asyncio.sleep(interval)
             await self.arefresh()
 
