@@ -1,6 +1,6 @@
 [project]
 name = "noxus-sdk"
-version = "0.1.0"
+version = "0.2.0"
 description = "Software development kit to extend the Noxus platform"
 requires-python = ">=3.10"
 readme = "README.md"
