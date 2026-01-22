@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from pydantic import BaseModel
@@ -43,7 +44,7 @@ class NodeDefinition(BaseModel):
     category: str | None = None
     sub_category: str | None = None
     example: str | None = None
-    integrations: list[str] | None = None
+    integrations: Sequence[str | list[str]] | None = None
     providers: list[str] | None = None
     knowledge_base_support: list[str] | None = None
     config_endpoint: str | None = None

@@ -82,6 +82,7 @@ class ConfigFileArray(BaseConfigDisplay):
     type: Literal["file_array"] = "file_array"  # type: ignore
     can_select_multiple_files: bool = False
     allowed_file_types: list[str] | None = None
+    variant: Literal["logo", "image", "regular"] = "regular"
 
 
 class ConfigTimePicker(BaseConfigDisplay):

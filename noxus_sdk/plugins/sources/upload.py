@@ -44,9 +44,13 @@ def _validate_member_name(name: str) -> bool:
     normalized = os.path.normpath(name)
 
     return not (
-        normalized.startswith(("/", "\\", "~", "..", "\\\\"))
-        or normalized in (".", "")
+        normalized.startswith(("/", "\\"))
+        or normalized.startswith("~")
+        or normalized.startswith("..")
+        or normalized == "."
+        or normalized == ""
         or (":" in normalized and os.name == "nt")  # Windows drive letters
+        or normalized.startswith("\\\\")  # UNC path
         or ".." in normalized.replace("\\", "/")  # Catch traversal
     )
 

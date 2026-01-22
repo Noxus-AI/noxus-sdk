@@ -1,17 +1,11 @@
 from __future__ import annotations
 
-from datetime import (
-    datetime,  # noqa: TCH003 - We need to import datetime for the WorkflowVersion class
-)
+from datetime import datetime
 from typing import TYPE_CHECKING
-from uuid import (
-    UUID,  # noqa: TCH003 - We need to import datetime for the WorkflowVersion class
-)
+from uuid import UUID
 
 from noxus_sdk.resources.base import BaseResource, BaseService
-from noxus_sdk.workflows import (
-    WorkflowDefinition,
-)
+from noxus_sdk.workflows import WorkflowDefinition
 
 if TYPE_CHECKING:
     import builtins

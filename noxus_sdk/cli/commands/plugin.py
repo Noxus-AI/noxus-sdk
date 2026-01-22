@@ -6,10 +6,10 @@ from pathlib import Path
 import typer
 
 from noxus_sdk.plugins import (
-    PluginManifest,  # noqa: TCH001 - Typer is getting messed up type checking
+    PluginManifest,  # noqa: TC001 - Typer is getting messed up type checking
 )
 from noxus_sdk.schemas import (
-    ValidationResult,  # noqa: TCH001 - Typer is getting messed up type checking
+    ValidationResult,  # noqa: TC001 - Typer is getting messed up type checking
 )
 
 app = typer.Typer(help="Plugin management commands")

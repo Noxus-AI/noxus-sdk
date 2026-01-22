@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import inspect
+import os
 import socket
-from typing import TYPE_CHECKING, Any, Callable, Coroutine, cast
+from typing import TYPE_CHECKING, Callable, cast
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -12,11 +13,12 @@ from uvicorn import Config, Server
 
 from noxus_sdk.nodes.schemas import ConfigResponse, ExecutionResponse
 from noxus_sdk.plugins.context import (
-    RemoteExecutionContext,  # noqa: TCH001 - For some reason ruff is not detecting the type hinting on responses, this cant be in the type check block
+    FileHelper,
+    RemoteExecutionContext,
 )
 from noxus_sdk.plugins.exceptions import PluginValidationError
 from noxus_sdk.plugins.manifest import (
-    PluginManifest,  # noqa: TCH001 - For some reason ruff is not detecting the type hinting on responses, this cant be in the type check block
+    PluginManifest,
 )
 from noxus_sdk.plugins.validate import discover_and_load_plugin
 from noxus_sdk.schemas import ValidationResult
@@ -24,7 +26,62 @@ from noxus_sdk.schemas import ValidationResult
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from noxus_sdk.files import File, SourceMetadata, SourceType
     from noxus_sdk.plugins import BasePlugin
+
+
+class PluginFileHelper(FileHelper):
+    def __init__(self, plugin_server_url: str):
+        self.plugin_server_url = plugin_server_url.rstrip("/")
+
+    async def get_content(self, file: File) -> bytes:
+        import httpx
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self.plugin_server_url}/files/{file.id}",
+                timeout=60.0,
+            )
+            response.raise_for_status()
+            return response.content
+
+    async def upload_file(
+        self,
+        file_name: str,
+        content: bytes,
+        content_type: str = "text/plain",
+        source_type: SourceType | str = "Document",
+        source_metadata: SourceMetadata | dict | None = None,
+        group_id: str | None = None,
+    ) -> dict:
+        import base64
+
+        import httpx
+
+        async with httpx.AsyncClient() as client:
+            # Ensure source_type is a string value, not the Enum member representation
+            source_type_val = source_type
+            if hasattr(source_type, "value"):
+                source_type_val = source_type.value
+            elif not isinstance(source_type, str):
+                source_type_val = str(source_type)
+
+            logger.info(f"Uploading file {file_name} for group {group_id or 'unknown'}")
+            payload = {
+                "filename": file_name,
+                "content_type": content_type,
+                "content_base64": base64.b64encode(content).decode("utf-8"),
+                "group_id": group_id or "00000000-0000-0000-0000-000000000000",
+                "source_type": source_type_val,
+                "source_metadata": source_metadata,
+            }
+            response = await client.post(
+                f"{self.plugin_server_url}/files/upload",
+                json=payload,
+                timeout=60.0,
+            )
+            response.raise_for_status()
+            return response.json()
 
 
 # Exception handler configuration: (status_code, error_message, detail_extractor)
@@ -36,7 +93,7 @@ EXCEPTION_HANDLERS: dict[
     ValidationError: (
         422,
         "Validation Error",
-        lambda e: cast(ValidationError, e).errors(),
+        lambda e: cast("ValidationError", e).errors(),
     ),
     PluginValidationError: (400, "Plugin Validation Error", str),
     Exception: (500, "Internal Server Error", lambda _: "An unexpected error occurred"),
@@ -51,7 +108,7 @@ def _register_exception_handlers(app: FastAPI) -> None:
         status_code: int,
         error_message: str,
         detail_extractor: Callable[[Exception], str | list],
-    ) -> Callable[[Request, Exception], Coroutine[Any, Any, JSONResponse]]:
+    ):
         async def handler(_: Request, exc: Exception) -> JSONResponse:
             logger.error(f"{exc_type.__name__}: {exc}")
             detail = detail_extractor(exc)
@@ -191,14 +248,56 @@ def generate_fastapi_app(plugin_class: type[BasePlugin], plugin_name: str) -> Fa
         node_config = node_class.get_config_class()(**config)
         node_instance = node_class(node_config)
 
+        # Initialize file helper
+        # We assume the plugin server is running on the same host or we can get its URL
+        # For now, let's use a default or environment variable
+        plugin_server_url = os.environ.get("PLUGIN_SERVER_URL", "http://localhost:8500")
+        ctx.set_file_helper(PluginFileHelper(plugin_server_url))
+
+        # Convert inputs to their proper types if they are Pydantic models (like File)
+        typed_inputs = {}
+        from noxus_sdk.nodes.connector import DataType
+
+        for connector in getattr(node_instance, "inputs", []):
+            conn_name = getattr(connector, "name", None)
+            if not conn_name:
+                continue
+
+            if conn_name in inputs:
+                val = inputs[conn_name]
+
+                # Get data type safely
+                conn_def = getattr(connector, "definition", None)
+                data_type = getattr(conn_def, "data_type", None) if conn_def else None
+                data_type_str = str(data_type).split(".")[-1] if data_type else ""
+
+                if data_type_str == "File" or data_type == DataType.File:
+                    from noxus_sdk.files import File
+
+                    if isinstance(val, dict):
+                        typed_inputs[conn_name] = File(**val)
+                    elif isinstance(val, list):
+                        typed_inputs[conn_name] = [
+                            File(**v) if isinstance(v, dict) else v for v in val
+                        ]
+                    else:
+                        typed_inputs[conn_name] = val
+                else:
+                    typed_inputs[conn_name] = val
+
+        # Add any inputs that weren't in the connector list
+        for key, value in inputs.items():
+            if key not in typed_inputs:
+                typed_inputs[key] = value
+
         # Execute node
         logger.debug(f"Executing node {node_name}")
         is_coroutine = inspect.iscoroutinefunction(node_instance.call)
 
         if is_coroutine:
-            outputs = await node_instance.call(ctx, **inputs)
+            outputs = await node_instance.call(ctx, **typed_inputs)
         else:
-            outputs = node_instance.call(ctx, **inputs)
+            outputs = node_instance.call(ctx, **typed_inputs)
 
         logger.debug(f"Node {node_name} executed successfully")
 
@@ -238,7 +337,7 @@ def generate_fastapi_app(plugin_class: type[BasePlugin], plugin_name: str) -> Fa
     @app.post("/integrations/{integration_name}/config")
     async def get_integration_config(
         integration_name: str,
-        _: RemoteExecutionContext,
+        ctx: RemoteExecutionContext,
     ) -> dict:
         """Get integration configuration"""
         logger.info(f"Getting configuration for integration: {integration_name}")
