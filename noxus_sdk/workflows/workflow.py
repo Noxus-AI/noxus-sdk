@@ -45,7 +45,9 @@ class DataType(str, enum.Enum):
     GoogleSheet = "GoogleSheet"
     SourceType = "SourceType"
 
-    def validate(self, value: Any) -> Any:  # noqa: ANN401 - This is a valid use case for Any
+    def validate(
+        self, value: Any
+    ) -> Any:  # noqa: ANN401 - This is a valid use case for Any
         if self.value in DATA_TYPE_MAP and not isinstance(
             value,
             DATA_TYPE_MAP[self.value],
@@ -64,7 +66,9 @@ class ConfigDefinition(BaseModel):
     optional: bool
     default: Any
 
-    def check_value(self, key: str, value: Any) -> None:  # noqa: ANN401 - This is a valid use case for Any
+    def check_value(
+        self, key: str, value: Any
+    ) -> None:  # noqa: ANN401 - This is a valid use case for Any
         if value is None:
             if not self.optional:
                 raise ConfigError(f"Missing required config value for {key}")
@@ -240,6 +244,7 @@ class Node(BaseModel):
         i = {i.name: i for i in self.outputs}
         if name not in i:
             raise KeyError(f"Output {name} not found (possible: {list(i.keys())})")
+
         output = i[name]
         if output.type in ["variable_connector", "variable_type_size_connector"]:
             if key is None:
