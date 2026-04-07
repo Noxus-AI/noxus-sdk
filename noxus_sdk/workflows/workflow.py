@@ -2,31 +2,23 @@ from __future__ import annotations
 
 import enum
 import uuid
-from collections.abc import Sequence
+from collections.abc import Sequence  # noqa: TC003 — needed at runtime for Pydantic field
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field, TypeAdapter, model_validator
 from pydantic.config import ConfigDict
 
-from noxus_sdk.client import Client
+from noxus_sdk.client import Client  # noqa: TC001 — needed at runtime for Pydantic field
 
 if TYPE_CHECKING:
-    from noxus_sdk.resources.runs import Run
+    from collections.abc import AsyncIterator, Iterator
+
+    from noxus_sdk.resources.runs import Run, RunEvent
     from noxus_sdk.resources.workflows import WorkflowVersion
 
 
 class ConfigError(Exception):
     pass
-
-
-DATA_TYPE_MAP = {
-    "int": int,
-    "float": (float, int),
-    "bool": bool,
-    "dict": dict,
-    "str": str,
-    "list": list,
-}
 
 
 class DataType(str, enum.Enum):
@@ -45,18 +37,59 @@ class DataType(str, enum.Enum):
     GoogleSheet = "GoogleSheet"
     SourceType = "SourceType"
 
-    def validate(
-        self, value: Any
-    ) -> Any:  # noqa: ANN401 - This is a valid use case for Any
-        if self.value in DATA_TYPE_MAP and not isinstance(
-            value,
-            DATA_TYPE_MAP[self.value],
-        ):
-            raise TypeError(
-                f"value '{value}' for data type {self} is invalid",
-            )
-
-        return value
+    def validate(self, value: Any):
+        try:
+            match self:
+                case DataType.int:
+                    if not isinstance(value, int):
+                        raise ValueError(
+                            f"value '{value}' for data type {self} is invalid"
+                        )
+                case DataType.float:
+                    if not isinstance(value, (float, int)):
+                        raise ValueError(
+                            f"value '{value}' for data type {self} is invalid"
+                        )
+                case DataType.bool:
+                    if not isinstance(value, bool):
+                        raise ValueError(
+                            f"value '{value}' for data type {self} is invalid"
+                        )
+                case DataType.dict:
+                    if not isinstance(value, dict):
+                        raise ValueError(
+                            f"value '{value}' for data type {self} is invalid"
+                        )
+                case DataType.str:
+                    if not isinstance(value, str):
+                        raise ValueError(
+                            f"value '{value}' for data type {self} is invalid"
+                        )
+                case DataType.list:
+                    if not isinstance(value, list):
+                        raise ValueError(
+                            f"value '{value}' for data type {self} is invalid"
+                        )
+                case DataType.Image:
+                    return value
+                case DataType.Audio:
+                    return value
+                case DataType.File:
+                    return value
+                case DataType.Quote:
+                    return value
+                case DataType.Custom:
+                    return value
+                case DataType.NoxusAny:
+                    return value
+                case DataType.GoogleSheet:
+                    return value
+                case DataType.SourceType:
+                    return value
+                case _:
+                    raise ValueError(f"Invalid data type: {self}")
+        except Exception as e:
+            raise ValueError(f"value '{value}' for data type {self} is invalid ({e})")
 
 
 class ConfigDefinition(BaseModel):
@@ -66,9 +99,7 @@ class ConfigDefinition(BaseModel):
     optional: bool
     default: Any
 
-    def check_value(
-        self, key: str, value: Any
-    ) -> None:  # noqa: ANN401 - This is a valid use case for Any
+    def check_value(self, key: str, value: Any):
         if value is None:
             if not self.optional:
                 raise ConfigError(f"Missing required config value for {key}")
@@ -79,13 +110,15 @@ class ConfigDefinition(BaseModel):
         try:
             self.type.validate(value)
         except Exception as e:
-            raise ConfigError(f"Invalid config value for {key}: [{e}]") from e
+            raise ConfigError(f"Invalid config value for {key}: [{e}]")
 
 
 class NodeDefinition(BaseModel):
     type: str
     title: str
     description: str
+    small_description: str | None = None
+    category: str | None = None
     integrations: Sequence[str | list[str]]
     inputs: list[dict]
     outputs: list[dict]
@@ -98,10 +131,10 @@ class NodeDefinition(BaseModel):
 NODE_TYPES: dict[str, NodeDefinition] = {}
 
 
-def load_node_types(nodes_: list[dict]) -> None:
+def load_node_types(nodes_: list[dict]):
     NODE_TYPES.clear()
     nodes: list[NodeDefinition] = TypeAdapter(list[NodeDefinition]).validate_python(
-        nodes_,
+        nodes_
     )
     for node in nodes:
         NODE_TYPES[node.type] = node
@@ -125,7 +158,7 @@ class NodeInput(BaseModel):
     type: ConnectorType
 
     @property
-    def id(self) -> str:
+    def id(self):
         return f"{self.node_id}::{self.name}"
 
 
@@ -148,7 +181,7 @@ class NodeOutput(BaseModel):
     type: ConnectorType
 
     @property
-    def id(self) -> str:
+    def id(self):
         return f"{self.node_id}::{self.name}"
 
 
@@ -171,7 +204,6 @@ class Node(BaseModel):
         name: str | None = None,
         key: str | None = None,
         type_definition: str | None = None,
-        *,
         type_definition_is_list: bool = False,
     ) -> EdgePoint:
         if name is None:
@@ -181,8 +213,8 @@ class Node(BaseModel):
         i = {i.name: i for i in self.inputs}
         if name not in i:
             raise KeyError(f"Input {name} not found (possible: {list(i.keys())})")
-        _input = i[name]
-        if _input.type in ["variable_connector", "variable_type_size_connector"]:
+        input = i[name]
+        if input.type in ["variable_connector", "variable_type_size_connector"]:
             if key is None:
                 raise ValueError("key is required for variable_connector")
             connector_config = self.connector_config.get("inputs")
@@ -191,16 +223,15 @@ class Node(BaseModel):
             connector_inputs = {i["name"]: i for i in connector_config}
             if name not in connector_inputs:
                 raise ValueError(
-                    f"Invalid key: {name} (possible: {list(connector_inputs.keys())})",
+                    f"Invalid key: {name} (possible: {list(connector_inputs.keys())})"
                 )
             connector_keys = connector_inputs[name].get("keys", [])
             if key not in connector_keys:
                 connector_keys.append(key)
-            if _input.type == "variable_type_size_connector":
-                if type_definition is None:
-                    raise ValueError(
-                        f"type_definition is required for variable_type_size_connector ({self.type}.{name})",
-                    )
+            if input.type == "variable_type_size_connector":
+                assert type_definition is not None, (
+                    f"type_definition is required for variable_type_size_connector ({self.type}.{name})"
+                )
                 type_definitions = connector_inputs[name].get("type_definitions", {})
                 choices = connector_inputs[name].get("choices", [])
                 if key not in type_definitions:
@@ -213,19 +244,14 @@ class Node(BaseModel):
                         choices.append(typedef)
                     connector_inputs[name]["choices"] = choices
                     connector_inputs[name]["type_definitions"] = type_definitions
-            return EdgePoint(
-                node_id=_input.node_id,
-                connector_name=_input.name,
-                key=key,
-            )
-        return EdgePoint(node_id=_input.node_id, connector_name=_input.name, key=None)
+            return EdgePoint(node_id=input.node_id, connector_name=input.name, key=key)
+        return EdgePoint(node_id=input.node_id, connector_name=input.name, key=None)
 
     def output(
         self,
         name: str | None = None,
         key: str | None = None,
         type_definition: str | None = None,
-        *,
         type_definition_is_list: bool = False,
     ) -> EdgePoint:
         if name is None:
@@ -244,7 +270,6 @@ class Node(BaseModel):
         i = {i.name: i for i in self.outputs}
         if name not in i:
             raise KeyError(f"Output {name} not found (possible: {list(i.keys())})")
-
         output = i[name]
         if output.type in ["variable_connector", "variable_type_size_connector"]:
             if key is None:
@@ -255,16 +280,15 @@ class Node(BaseModel):
             connector_outputs = {o["name"]: o for o in connector_config}
             if name not in connector_outputs:
                 raise ValueError(
-                    f"Invalid key: {name} (possible: {list(connector_outputs.keys())})",
+                    f"Invalid key: {name} (possible: {list(connector_outputs.keys())})"
                 )
             connector_keys = connector_outputs[name].get("keys", [])
             if key not in connector_keys:
                 connector_keys.append(key)
             if output.type == "variable_type_size_connector":
-                if type_definition is None:
-                    raise ValueError(
-                        f"type_definition is required for variable_type_size_connector ({self.type}.{name})",
-                    )
+                assert type_definition is not None, (
+                    f"type_definition is required for variable_type_size_connector ({self.type}.{name})"
+                )
                 type_definitions = connector_outputs[name].get("type_definitions", {})
                 choices = connector_outputs[name].get("choices", [])
                 if key not in type_definitions:
@@ -278,20 +302,17 @@ class Node(BaseModel):
                     connector_outputs[name]["type_definitions"] = type_definitions
                     connector_outputs[name]["choices"] = choices
             return EdgePoint(
-                node_id=output.node_id,
-                connector_name=output.name,
-                key=key,
+                node_id=output.node_id, connector_name=output.name, key=key
             )
         return EdgePoint(node_id=output.node_id, connector_name=output.name, key=None)
 
     def create(self, x: int, y: int) -> Node:
         node_type = NODE_TYPES.get(self.type)
-        if not node_type:
-            raise ValueError(f"Node type {self.type} not found")
+        assert node_type, f"Node type {self.type} not found"
         self.config_definition = node_type.config
         self.inputs = [
-            NodeInput(node_id=str(self.id), name=i["name"], type=i["type"])
-            for i in node_type.inputs
+            NodeInput(node_id=str(self.id), name=input["name"], type=input["type"])
+            for input in node_type.inputs
         ]
         self.outputs = [
             NodeOutput(node_id=str(self.id), name=output["name"], type=output["type"])
@@ -306,11 +327,11 @@ class Node(BaseModel):
         self.display = {"position": {"x": x, "y": y}}
         return self
 
-    def config(self, **kwargs) -> Node:
+    def config(self, **kwargs):
         for key, value in kwargs.items():
             if key not in self.config_definition:
                 raise ConfigError(
-                    f"Invalid config key: {key} (possible: {[k for k, v in self.config_definition.items() if v.visible]})",
+                    f"Invalid config key: {key} (possible: {[k for k, v in self.config_definition.items() if v.visible]})"
                 )
             self.config_definition[key].check_value(key, value)
             self.node_config[key] = value
@@ -320,7 +341,7 @@ class Node(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def call_create_after_validate(self) -> Node:
+    def call_create_after_validate(self):
         old_display = dict(self.display)
         self.create(0, 0)
         if old_display:
@@ -342,7 +363,7 @@ class WorkflowDefinition(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _definition_flattener(cls, values: dict) -> dict:
+    def _definition_flattener(cls, values):
         if "definition" in values:
             values["nodes"] = values["definition"]["nodes"]
             values["edges"] = values["definition"]["edges"]
@@ -361,11 +382,7 @@ class WorkflowDefinition(BaseModel):
             d["error_handler"] = str(self.error_handler)
         return d
 
-    def refresh_from_data(
-        self,
-        client: Client | None = None,
-        **data,
-    ) -> WorkflowDefinition:
+    def refresh_from_data(self, client: Client | None = None, **data):
         n = self.__class__.model_validate(data)
         for k in n.model_fields_set:
             v = getattr(n, k)
@@ -391,6 +408,7 @@ class WorkflowDefinition(BaseModel):
         self,
         body: dict[str, Any],
         workflow_version_id: uuid.UUID | str | None = None,
+        callback_url: str | None = None,
     ) -> Run:
         from noxus_sdk.resources.runs import Run
 
@@ -400,6 +418,8 @@ class WorkflowDefinition(BaseModel):
         req: dict[str, Any] = {"input": body}
         if workflow_version_id:
             req["workflow_version_id"] = str(workflow_version_id)
+        if callback_url:
+            req["callback_url"] = callback_url
 
         response = self.client.post(url, req)
         return Run(client=self.client, **response)
@@ -408,6 +428,7 @@ class WorkflowDefinition(BaseModel):
         self,
         body: dict[str, Any],
         workflow_version_id: uuid.UUID | str | None = None,
+        callback_url: str | None = None,
     ) -> Run:
         if not self.client:
             raise ValueError("Client not set")
@@ -416,54 +437,64 @@ class WorkflowDefinition(BaseModel):
         req: dict[str, Any] = {"input": body}
         if workflow_version_id:
             req["workflow_version_id"] = str(workflow_version_id)
+        if callback_url:
+            req["callback_url"] = callback_url
         response = await self.client.apost(f"/v1/workflows/{self.id}/runs", req)
         return Run(client=self.client, **response)
 
-    def update(self, *, force: bool = False) -> WorkflowDefinition:
+    def run_and_stream(
+        self,
+        body: dict[str, Any],
+        workflow_version_id: uuid.UUID | str | None = None,
+    ) -> Iterator[RunEvent]:
+        """Create a run and stream its events via SSE until completion."""
+        run = self.run(body, workflow_version_id=workflow_version_id)
+        yield from run.stream()
+
+    async def arun_and_stream(
+        self,
+        body: dict[str, Any],
+        workflow_version_id: uuid.UUID | str | None = None,
+    ) -> AsyncIterator[RunEvent]:
+        """Create a run and stream its events via SSE until completion (async)."""
+        run = await self.arun(body, workflow_version_id=workflow_version_id)
+        async for event in run.astream():
+            yield event
+
+    def update(self, force: bool = False):
         if not self.client:
             raise ValueError("Client not set")
-        w = self.client.workflows.update(self.id, self, force=force)
+        w = self.client.workflows.update(self.id, self, force)
         self.refresh_from_data(client=self.client, **w.model_dump())
         return w
 
-    async def aupdate(self, *, force: bool = False) -> WorkflowDefinition:
+    async def aupdate(self, force: bool = False):
         if not self.client:
             raise ValueError("Client not set")
-        w = await self.client.workflows.aupdate(self.id, self, force=force)
+        w = await self.client.workflows.aupdate(self.id, self, force)
         self.refresh_from_data(client=self.client, **w.model_dump())
         return w
 
-    def save(self) -> WorkflowDefinition:
+    def save(self):
         if not self.client:
             raise ValueError("Client not set")
         return self.client.workflows.save(self)
 
-    async def asave(self) -> WorkflowDefinition:
+    async def asave(self):
         if not self.client:
             raise ValueError("Client not set")
         return await self.client.workflows.asave(self)
 
-    def save_version(
-        self,
-        name: str,
-        description: str | None = None,
-    ) -> WorkflowVersion:
+    def save_version(self, name: str, description: str | None = None):
         if not self.client:
             raise ValueError("Client not set")
         return self.client.workflows.save_version(self.id, self, name, description)
 
-    async def asave_version(
-        self,
-        name: str,
-        description: str | None = None,
-    ) -> WorkflowVersion:
+    async def asave_version(self, name: str, description: str | None = None):
         if not self.client:
             raise ValueError("Client not set")
         return await self.client.workflows.asave_version(
-            self.id,
-            self,
-            name,
-            description,
+            self.id, self, name, description
         )
 
     def update_version(
@@ -475,11 +506,7 @@ class WorkflowDefinition(BaseModel):
         if not self.client:
             raise ValueError("Client not set")
         return self.client.workflows.update_version(
-            self.id,
-            version_id,
-            name,
-            description,
-            self,
+            self.id, version_id, name, description, self
         )
 
     async def aupdate_version(
@@ -491,11 +518,7 @@ class WorkflowDefinition(BaseModel):
         if not self.client:
             raise ValueError("Client not set")
         return await self.client.workflows.aupdate_version(
-            self.id,
-            version_id,
-            name,
-            description,
-            self,
+            self.id, version_id, name, description, self
         )
 
     def list_versions(self) -> list[WorkflowVersion]:
@@ -508,8 +531,8 @@ class WorkflowDefinition(BaseModel):
             raise ValueError("Client not set")
         return await self.client.workflows.alist_versions(self.id)
 
-    def verify_name_legal(self, name: str) -> None:
-        if name in [
+    def verify_name_legal(self, name):
+        assert name not in [
             "AgentStartNode",
             "AgentEndNode",
             "AgentMessageSendNode",
@@ -517,10 +540,9 @@ class WorkflowDefinition(BaseModel):
             "FormExtractionAgentNode",
             "BasicAgentNode",
             "ChatAgentNode",
-        ]:
-            raise ValueError(f"Invalid node name: {name}")
+        ]
 
-    def node(self, name: str) -> Node:
+    def node(self, name) -> Node:
         self.verify_name_legal(name)
         self.x += 350
         n = Node(id=str(uuid.uuid4()), type=name)
@@ -533,23 +555,24 @@ class WorkflowDefinition(BaseModel):
         self.edges.append(e)
         return e
 
-    def link_many(self, *nodes: Node) -> None:
+    def link_many(self, *nodes: Node):
         for i in range(len(nodes) - 1):
-            if not len(nodes[i].outputs) == 1:
-                raise ValueError(
-                    f"Expected 1 output for {nodes[i].type}, got {len(nodes[i].outputs)}",
+            assert len(nodes[i].outputs) <= 2
+            if len(nodes[i].outputs) == 1:
+                _output = nodes[i].outputs[0]
+            else:
+                _output = (
+                    nodes[i].outputs[0]
+                    if nodes[i].outputs[0].name != "on_error"
+                    else nodes[i].outputs[1]
                 )
-
-            if nodes[i].outputs[0].type == "variable_connector":
+            if _output.type == "variable_connector":
                 raise ValueError(
-                    f"A key is required for variable_connector output so unable to link {nodes[i].type} to {nodes[i + 1].type} automatically",
+                    f"A key is required for variable_connector output so unable to link {nodes[i].type} to {nodes[i + 1].type} automatically"
                 )
-            if not len(nodes[i + 1].inputs) == 1:
-                raise ValueError(
-                    f"Expected 1 input for {nodes[i + 1].type}, got {len(nodes[i + 1].inputs)}",
-                )
+            assert len(nodes[i + 1].inputs) == 1
             if nodes[i + 1].inputs[0].type == "variable_connector":
                 raise ValueError(
-                    f"A key is required for variable_connector input so unable to link {nodes[i].type} to {nodes[i + 1].type} automatically",
+                    f"A key is required for variable_connector input so unable to link {nodes[i].type} to {nodes[i + 1].type} automatically"
                 )
             self.link(nodes[i].output(), nodes[i + 1].input())

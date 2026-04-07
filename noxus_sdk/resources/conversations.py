@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
-from typing import TYPE_CHECKING, Annotated, Literal
+from datetime import datetime  # noqa: TC003
+from typing import Annotated, Any, Literal, TYPE_CHECKING
+
 from uuid import UUID, uuid4
 
 from pydantic import (
@@ -82,6 +83,91 @@ class FileSystemTool(ConversationTool):
     type: Literal["filesystem"] = "filesystem"
 
 
+class CodeExecutionTool(ConversationTool):
+    """Tool that allows the agent to run Python code in a sandbox"""
+
+    type: Literal["code_execution"] = "code_execution"
+    timeout: int = 120
+
+
+class AgentTool(ConversationTool):
+    """Tool that allows calling another agent as a co-worker"""
+
+    model_config = ConfigDict(extra="allow")
+    type: Literal["agent_tool"] = "agent_tool"
+    agent_id: str | None = None
+
+
+class ActionTool(ConversationTool):
+    """Tool that runs a custom action node"""
+
+    model_config = ConfigDict(extra="allow")
+    type: Literal["action"] = "action"
+
+
+class ChatflowTool(ConversationTool):
+    """Tool for chatflow execution"""
+
+    model_config = ConfigDict(extra="allow")
+    type: Literal["chatflow"] = "chatflow"
+
+
+class FlowTransitionTool(ConversationTool):
+    """Tool for flow transitions"""
+
+    model_config = ConfigDict(extra="allow")
+    type: Literal["flow_transition"] = "flow_transition"
+
+
+class ChatflowExtractionTool(ConversationTool):
+    """Tool for chatflow extraction"""
+
+    model_config = ConfigDict(extra="allow")
+    type: Literal["chatflow_extraction"] = "chatflow_extraction"
+
+
+class ChatflowTransitionTool(ConversationTool):
+    """Tool for chatflow transitions"""
+
+    model_config = ConfigDict(extra="allow")
+    type: Literal["chatflow_transition"] = "chatflow_transition"
+
+
+class SandboxTool(ConversationTool):
+    """Tool that provides sandboxed file and shell operations"""
+
+    model_config = ConfigDict(extra="allow")
+    type: Literal["sandbox"] = "sandbox"
+
+
+class ScheduleTool(ConversationTool):
+    """Tool for creating periodic and one-shot scheduled tasks"""
+
+    model_config = ConfigDict(extra="allow")
+    type: Literal["schedule_tool"] = "schedule_tool"
+
+
+class TodosTool(ConversationTool):
+    """Tool for in-conversation task tracking"""
+
+    model_config = ConfigDict(extra="allow")
+    type: Literal["todos"] = "todos"
+
+
+class SubagentTool(ConversationTool):
+    """Tool for delegating tasks to specialized subagents"""
+
+    model_config = ConfigDict(extra="allow")
+    type: Literal["subagent"] = "subagent"
+
+
+class AgentMemoryTool(ConversationTool):
+    """Tool for persistent agent memory across conversations"""
+
+    model_config = ConfigDict(extra="allow")
+    type: Literal["agent_memory"] = "agent_memory"
+
+
 AnyToolSettings = Annotated[
     WebResearchTool
     | NoxusQaTool
@@ -91,7 +177,19 @@ AnyToolSettings = Annotated[
     | HumanInTheLoopTool
     | AttachFileTool
     | MemoryTool
-    | FileSystemTool,
+    | FileSystemTool
+    | CodeExecutionTool
+    | AgentTool
+    | ActionTool
+    | ChatflowTool
+    | FlowTransitionTool
+    | ChatflowExtractionTool
+    | ChatflowTransitionTool
+    | SandboxTool
+    | ScheduleTool
+    | TodosTool
+    | SubagentTool
+    | AgentMemoryTool,
     Discriminator("type"),
 ]
 
@@ -101,8 +199,31 @@ class ConversationSettings(BaseModel):
     temperature: float
     max_tokens: int = 64000
     tools: list[AnyToolSettings]
+    persona: str | None = None
+    tone: str | None = None
     extra_instructions: str | None = None
     agent_flow_id: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_text_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            for field in ["persona", "tone", "extra_instructions"]:
+                value = data.get(field)
+                if value is None:
+                    continue
+                if isinstance(value, dict):
+                    data[field] = value.get("text")
+                elif isinstance(value, list):
+                    data[field] = (
+                        "".join(
+                            part.get("text", "")
+                            for part in value
+                            if isinstance(part, dict)
+                        )
+                        or None
+                    )
+        return data
 
 
 class ConversationFile(BaseModel):
@@ -115,7 +236,7 @@ class ConversationFile(BaseModel):
     type: str = ""
 
     @model_validator(mode="after")
-    def validate_content_url(self) -> ConversationFile:
+    def validate_content_url(self):
         if self.b64_content is None and self.url is None:
             raise ValidationError("Either base64 content or url must be provided")
         return self
@@ -123,7 +244,7 @@ class ConversationFile(BaseModel):
 
 class MessageRequest(BaseModel):
     content: str
-    tool: Literal["web_research", "kb_qa", "workflow"] | str | None = None  # noqa: PYI051 - For documentation purposes
+    tool: Literal["web_research", "kb_qa", "workflow"] | str | None = None
     kb_id: str | None = None
     workflow_id: str | None = None
     files: list[ConversationFile] | None = None
@@ -150,11 +271,10 @@ class Conversation(BaseResource):
     last_updated_at: str
     settings: ConversationSettings
     etag: str | None = None
-    messages: list[Message] = []  # noqa: RUF012
+    messages: list[Message] = []
     status: str
     agent_id: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("assistant_id", "agent_id"),
+        default=None, validation_alias=AliasChoices("assistant_id", "agent_id")
     )
 
     def _update_w_response(self, response: dict) -> None:
@@ -186,7 +306,6 @@ class Conversation(BaseResource):
         response = await self.client.apost(
             f"/v1/conversations/{self.id}",
             body=message.model_dump(),
-            timeout=30,
         )
         self._update_w_response(response)
         return self
@@ -194,7 +313,7 @@ class Conversation(BaseResource):
     def iter_messages(self) -> Iterator[MessageEvent]:
         resp = self.client.event_stream(
             f"/v1/conversations/{self.id}/events"
-            + ("?etag=" + self.etag if self.etag else ""),
+            + ("?etag=" + self.etag if self.etag else "")
         )
         for event in resp:
             message = MessageEvent.model_validate_json(event.data)
@@ -209,7 +328,7 @@ class Conversation(BaseResource):
     async def aiter_messages(self) -> AsyncIterator[MessageEvent]:
         resp = self.client.aevent_stream(
             f"/v1/conversations/{self.id}/events"
-            + ("?etag=" + self.etag if self.etag else ""),
+            + ("?etag=" + self.etag if self.etag else "")
         )
         async for event in resp:
             message = MessageEvent.model_validate_json(event.data)
@@ -225,7 +344,6 @@ class Conversation(BaseResource):
         response = self.client.post(
             f"/v1/conversations/{self.id}",
             body=message.model_dump(),
-            timeout=30,
         )
         self._update_w_response(response)
 
@@ -238,7 +356,6 @@ class Conversation(BaseResource):
         response = self.client.post(
             f"/v1/conversations/{self.id}/chat",
             body=message.model_dump(),
-            timeout=120,
         )
         return ChatMessage.model_validate(response)
 
@@ -246,7 +363,6 @@ class Conversation(BaseResource):
         response = await self.client.apost(
             f"/v1/conversations/{self.id}/chat",
             body=message.model_dump(),
-            timeout=120,
         )
         return ChatMessage.model_validate(response)
 
