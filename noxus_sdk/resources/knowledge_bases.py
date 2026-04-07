@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import builtins
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias
@@ -18,12 +16,7 @@ RunStatus = Literal["queued", "running", "failed", "completed", "stopped"]
 DocumentStatus = Literal["trained", "training", "error", "uploaded", "folder"]
 
 SourceType = Literal[
-    "document",
-    "google_drive",
-    "onedrive",
-    "sharepoint",
-    "website",
-    "custom",
+    "document", "google_drive", "onedrive", "sharepoint", "website", "custom"
 ]
 
 RunID: TypeAlias = str
@@ -98,10 +91,7 @@ class KnowledgeBaseIngestion(BaseModel):
 
 class KnowledgeBaseRetrieval(BaseModel):
     type: Literal[
-        "full_text_search",
-        "semantic_search",
-        "hybrid_search",
-        "hybrid_reranking",
+        "full_text_search", "semantic_search", "hybrid_search", "hybrid_reranking"
     ] = "hybrid_reranking"
     hybrid_settings: dict
     reranker_settings: dict
@@ -138,10 +128,36 @@ class KnowledgeBaseDocument(BaseModel):
     error: dict | None = None
 
 
+class DocumentResult(BaseModel):
+    id: str
+    created_at: str
+    updated_at: str
+    group_id: str
+    kb_id: str
+    file_id: str | None = None
+    name: str
+    status: DocumentStatus
+    short_summary: str | None = None
+    summary: str | None = None
+    doc_type: str | None = None
+    doc_metadata: dict
+    prefix: str
+    m_source_type: str
+    m_source_metadata: dict | None = None
+
+
+class SearchResult(BaseModel):
+    score: float
+    content: str
+    source: str | None = None
+    document_source: DocumentResult
+
+
 class CreateDocument(BaseModel):
     name: str
     prefix: str = "/"
     status: str = "uploaded"
+    # source_type: str = "document"
 
 
 class UpdateDocument(BaseModel):
@@ -174,17 +190,17 @@ class KnowledgeBase(BaseResource):
     retrieval: dict | None = None
     error: dict | None = None
     embeddings: dict | None = None
-    documents: builtins.list[KnowledgeBaseDocument] = []  # noqa: RUF012
+    documents: builtins.list[KnowledgeBaseDocument] = []
     version: Literal["v2", "v3"] = "v3"
 
-    def refresh(self) -> KnowledgeBase:
+    def refresh(self) -> "KnowledgeBase":
         response = self.client.get(f"/v1/knowledge-bases/{self.id}")
         for key, value in response.items():
             if hasattr(self, key):
                 setattr(self, key, value)
         return self
 
-    async def arefresh(self) -> KnowledgeBase:
+    async def arefresh(self) -> "KnowledgeBase":
         response = await self.client.aget(f"/v1/knowledge-bases/{self.id}")
         for key, value in response.items():
             if hasattr(self, key):
@@ -200,9 +216,7 @@ class KnowledgeBase(BaseResource):
         return response["success"]
 
     def get_runs(
-        self,
-        status: RunStatus | None = None,
-        run_ids: str | None = None,
+        self, status: RunStatus | None = None, run_ids: str | None = None
     ) -> builtins.list[Run]:
         params: dict[str, str] = {}
         if status:
@@ -214,9 +228,7 @@ class KnowledgeBase(BaseResource):
         return [Run(client=self.client, **run) for run in response]
 
     async def aget_runs(
-        self,
-        status: RunStatus | None = None,
-        run_ids: str | None = None,
+        self, status: RunStatus | None = None, run_ids: str | None = None
     ) -> builtins.list[Run]:
         params: dict[str, str] = {}
         if status:
@@ -225,57 +237,50 @@ class KnowledgeBase(BaseResource):
             params["run_ids"] = run_ids
 
         response = await self.client.aget(
-            f"/v1/knowledge-bases/{self.id}/runs",
-            params=params,
+            f"/v1/knowledge-bases/{self.id}/runs", params=params
         )
         return [Run(client=self.client, **run) for run in response]
 
     def get_document(self, document_id: str) -> KnowledgeBaseDocument:
         response = self.client.get(
-            f"/v1/knowledge-bases/{self.id}/document/{document_id}",
+            f"/v1/knowledge-bases/{self.id}/document/{document_id}"
         )
         return KnowledgeBaseDocument(**response)
 
     async def aget_document(self, document_id: str) -> KnowledgeBaseDocument:
         response = await self.client.aget(
-            f"/v1/knowledge-bases/{self.id}/document/{document_id}",
+            f"/v1/knowledge-bases/{self.id}/document/{document_id}"
         )
         return KnowledgeBaseDocument(**response)
 
     def create_document(self, document: CreateDocument) -> KnowledgeBaseDocument:
         response = self.client.post(
-            f"/v1/knowledge-bases/{self.id}/document",
-            body=document.model_dump(),
+            f"/v1/knowledge-bases/{self.id}/document", body=document.model_dump()
         )
         return KnowledgeBaseDocument(**response)
 
     async def acreate_document(self, document: CreateDocument) -> KnowledgeBaseDocument:
         response = await self.client.apost(
-            f"/v1/knowledge-bases/{self.id}/document",
-            body=document.model_dump(),
+            f"/v1/knowledge-bases/{self.id}/document", body=document.model_dump()
         )
         return KnowledgeBaseDocument(**response)
 
     def upload_document(
-        self,
-        files: builtins.list[str | Path],
-        prefix: str = "/",
+        self, files: builtins.list[str | Path], prefix: str = "/"
     ) -> builtins.list[RunID]:
         files_list: builtins.list[HttpxFile] = []
         for file in files:
             with open(str(file), "rb") as f:
                 files_list.append(("files", (Path(file).name, f.read(), None)))
 
-        return self.client.post(
+        return self.client.post(  # type: ignore[return-value]
             f"/v1/knowledge-bases/{self.id}/upload_train",
             files=files_list,
             params={"prefix": prefix},
         )
 
     async def aupload_document(
-        self,
-        files: builtins.list[str | Path],
-        prefix: str = "/",
+        self, files: builtins.list[str | Path], prefix: str = "/"
     ) -> builtins.list[RunID]:
         files_list: builtins.list[HttpxFile] = []
         for file in files:
@@ -283,16 +288,30 @@ class KnowledgeBase(BaseResource):
                 content = await f.read()
                 files_list.append(("files", (Path(file).name, content, None)))
 
-        return await self.client.apost(
+        return await self.client.apost(  # type: ignore[return-value]
             f"/v1/knowledge-bases/{self.id}/upload_train",
             files=files_list,
             params={"prefix": prefix},
         )
 
+    def search(self, query: str, prefix: str = "/") -> builtins.list[SearchResult]:
+        response = self.client.post(
+            f"/v1/knowledge-bases/{self.id}/search",
+            params={"query": query, "prefix": prefix},
+        )
+        return [SearchResult(**result) for result in response]
+
+    async def asearch(
+        self, query: str, prefix: str = "/"
+    ) -> builtins.list[SearchResult]:
+        response = await self.client.apost(
+            f"/v1/knowledge-bases/{self.id}/search",
+            params={"query": query, "prefix": prefix},
+        )
+        return [SearchResult(**result) for result in response]
+
     def update_document(
-        self,
-        document_id: str,
-        update: UpdateDocument,
+        self, document_id: str, update: UpdateDocument
     ) -> KnowledgeBaseDocument:
         response = self.client.patch(
             f"/v1/knowledge-bases/{self.id}/document/{document_id}",
@@ -301,9 +320,7 @@ class KnowledgeBase(BaseResource):
         return KnowledgeBaseDocument(**response)
 
     async def aupdate_document(
-        self,
-        document_id: str,
-        update: UpdateDocument,
+        self, document_id: str, update: UpdateDocument
     ) -> KnowledgeBaseDocument:
         response = await self.client.apatch(
             f"/v1/knowledge-bases/{self.id}/document/{document_id}",
@@ -313,21 +330,18 @@ class KnowledgeBase(BaseResource):
 
     def delete_document(self, document_id: str) -> KnowledgeBaseDocument:
         response = self.client.delete(
-            f"/v1/knowledge-bases/{self.id}/document/{document_id}",
+            f"/v1/knowledge-bases/{self.id}/document/{document_id}"
         )
         return KnowledgeBaseDocument(**response)
 
     async def adelete_document(self, document_id: str) -> KnowledgeBaseDocument:
         response = await self.client.adelete(
-            f"/v1/knowledge-bases/{self.id}/document/{document_id}",
+            f"/v1/knowledge-bases/{self.id}/document/{document_id}"
         )
         return KnowledgeBaseDocument(**response)
 
     def list_documents(
-        self,
-        status: DocumentStatus,
-        page: int = 1,
-        page_size: int = 10,
+        self, status: DocumentStatus, page: int = 1, page_size: int = 10
     ) -> builtins.list[KnowledgeBaseDocument]:
         params: dict[str, Any] = {"page": page, "page_size": page_size}
         if status:
@@ -340,10 +354,7 @@ class KnowledgeBase(BaseResource):
         return [KnowledgeBaseDocument(**doc) for doc in response["items"]]
 
     async def alist_documents(
-        self,
-        status: DocumentStatus,
-        page: int = 1,
-        page_size: int = 10,
+        self, status: DocumentStatus, page: int = 1, page_size: int = 10
     ) -> builtins.list[KnowledgeBaseDocument]:
         params: dict[str, Any] = {"page": page, "page_size": page_size}
         if status:
@@ -370,9 +381,7 @@ class KnowledgeBaseService(BaseService[KnowledgeBase]):
         ]
 
     async def alist(
-        self,
-        page: int = 1,
-        page_size: int = 10,
+        self, page: int = 1, page_size: int = 10
     ) -> builtins.list[KnowledgeBase]:
         knowledge_bases = await self.client.apget(
             "/v1/knowledge-bases",
@@ -391,7 +400,7 @@ class KnowledgeBaseService(BaseService[KnowledgeBase]):
 
     async def aget(self, knowledge_base_id: str) -> KnowledgeBase:
         knowledge_base = await self.client.aget(
-            f"/v1/knowledge-bases/{knowledge_base_id}",
+            f"/v1/knowledge-bases/{knowledge_base_id}"
         )
         return KnowledgeBase(client=self.client, **knowledge_base)
 
@@ -459,8 +468,7 @@ class KnowledgeBaseService(BaseService[KnowledgeBase]):
             params["run_ids"] = run_ids
 
         response = self.client.get(
-            f"/v1/knowledge-bases/{knowledge_base_id}/runs",
-            params=params,
+            f"/v1/knowledge-bases/{knowledge_base_id}/runs", params=params
         )
         return [Run(client=self.client, **run) for run in response]
 
@@ -477,36 +485,28 @@ class KnowledgeBaseService(BaseService[KnowledgeBase]):
             params["run_ids"] = run_ids
 
         response = await self.client.aget(
-            f"/v1/knowledge-bases/{knowledge_base_id}/runs",
-            params=params,
+            f"/v1/knowledge-bases/{knowledge_base_id}/runs", params=params
         )
         return [Run(client=self.client, **run) for run in response]
 
     def get_document(
-        self,
-        knowledge_base_id: str,
-        document_id: str,
+        self, knowledge_base_id: str, document_id: str
     ) -> KnowledgeBaseDocument:
         response = self.client.get(
-            f"/v1/knowledge-bases/{knowledge_base_id}/document/{document_id}",
+            f"/v1/knowledge-bases/{knowledge_base_id}/document/{document_id}"
         )
         return KnowledgeBaseDocument(**response)
 
     async def aget_document(
-        self,
-        knowledge_base_id: str,
-        document_id: str,
+        self, knowledge_base_id: str, document_id: str
     ) -> KnowledgeBaseDocument:
         response = await self.client.aget(
-            f"/v1/knowledge-bases/{knowledge_base_id}/document/{document_id}",
+            f"/v1/knowledge-bases/{knowledge_base_id}/document/{document_id}"
         )
         return KnowledgeBaseDocument(**response)
 
     def update_document(
-        self,
-        knowledge_base_id: str,
-        document_id: str,
-        update: UpdateDocument,
+        self, knowledge_base_id: str, document_id: str, update: UpdateDocument
     ) -> KnowledgeBaseDocument:
         response = self.client.patch(
             f"/v1/knowledge-bases/{knowledge_base_id}/document/{document_id}",
@@ -515,10 +515,7 @@ class KnowledgeBaseService(BaseService[KnowledgeBase]):
         return KnowledgeBaseDocument(**response)
 
     async def aupdate_document(
-        self,
-        knowledge_base_id: str,
-        document_id: str,
-        update: UpdateDocument,
+        self, knowledge_base_id: str, document_id: str, update: UpdateDocument
     ) -> KnowledgeBaseDocument:
         response = await self.client.apatch(
             f"/v1/knowledge-bases/{knowledge_base_id}/document/{document_id}",
@@ -527,22 +524,18 @@ class KnowledgeBaseService(BaseService[KnowledgeBase]):
         return KnowledgeBaseDocument(**response)
 
     def delete_document(
-        self,
-        knowledge_base_id: str,
-        document_id: str,
+        self, knowledge_base_id: str, document_id: str
     ) -> KnowledgeBaseDocument:
         response = self.client.delete(
-            f"/v1/knowledge-bases/{knowledge_base_id}/document/{document_id}",
+            f"/v1/knowledge-bases/{knowledge_base_id}/document/{document_id}"
         )
         return KnowledgeBaseDocument(**response)
 
     async def adelete_document(
-        self,
-        knowledge_base_id: str,
-        document_id: str,
+        self, knowledge_base_id: str, document_id: str
     ) -> KnowledgeBaseDocument:
         response = await self.client.adelete(
-            f"/v1/knowledge-bases/{knowledge_base_id}/document/{document_id}",
+            f"/v1/knowledge-bases/{knowledge_base_id}/document/{document_id}"
         )
         return KnowledgeBaseDocument(**response)
 
@@ -581,9 +574,7 @@ class KnowledgeBaseService(BaseService[KnowledgeBase]):
         return [KnowledgeBaseDocument(**doc) for doc in response]
 
     def create_document(
-        self,
-        knowledge_base_id: str,
-        document: CreateDocument,
+        self, knowledge_base_id: str, document: CreateDocument
     ) -> KnowledgeBaseDocument:
         response = self.client.post(
             f"/v1/knowledge-bases/{knowledge_base_id}/document",
@@ -592,9 +583,7 @@ class KnowledgeBaseService(BaseService[KnowledgeBase]):
         return KnowledgeBaseDocument(**response)
 
     async def acreate_document(
-        self,
-        knowledge_base_id: str,
-        document: CreateDocument,
+        self, knowledge_base_id: str, document: CreateDocument
     ) -> KnowledgeBaseDocument:
         response = await self.client.apost(
             f"/v1/knowledge-bases/{knowledge_base_id}/document",
@@ -603,24 +592,18 @@ class KnowledgeBaseService(BaseService[KnowledgeBase]):
         return KnowledgeBaseDocument(**response)
 
     def train_document(
-        self,
-        knowledge_base_id: str,
-        source: Source,
-        prefix: str = "/",
+        self, knowledge_base_id: str, source: Source, prefix: str = "/"
     ) -> builtins.list[RunID]:
-        return self.client.post(
+        return self.client.post(  # type: ignore[return-value]
             f"/v1/knowledge-bases/{knowledge_base_id}/generic_train",
             body=source.model_dump(),
             params={"prefix": prefix},
         )
 
     async def atrain_document(
-        self,
-        knowledge_base_id: str,
-        source: Source,
-        prefix: str = "/",
+        self, knowledge_base_id: str, source: Source, prefix: str = "/"
     ) -> builtins.list[RunID]:
-        return await self.client.apost(
+        return await self.client.apost(  # type: ignore[return-value]
             f"/v1/knowledge-bases/{knowledge_base_id}/generic_train",
             body=source.model_dump(),
             params={"prefix": prefix},
@@ -637,7 +620,7 @@ class KnowledgeBaseService(BaseService[KnowledgeBase]):
             with open(str(file), "rb") as f:
                 files_list.append(("files", (Path(file).name, f.read(), None)))
 
-        return self.client.post(
+        return self.client.post(  # type: ignore[return-value]
             f"/v1/knowledge-bases/{knowledge_base_id}/upload_train",
             files=files_list,
             params={"prefix": prefix},
@@ -655,7 +638,7 @@ class KnowledgeBaseService(BaseService[KnowledgeBase]):
                 content = await f.read()
                 files_list.append(("files", (Path(file).name, content, None)))
 
-        return await self.client.apost(
+        return await self.client.apost(  # type: ignore[return-value]
             f"/v1/knowledge-bases/{knowledge_base_id}/upload_train",
             files=files_list,
             params={"prefix": prefix},

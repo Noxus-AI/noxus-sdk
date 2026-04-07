@@ -18,14 +18,14 @@ class AgentFlowDefinition(WorkflowDefinition):
         ]:
             raise ValueError(f"Invalid node name: {name}")
 
-    def update(self, *, force: bool = False) -> "AgentFlowDefinition":
+    def update(self, force: bool = False) -> "AgentFlowDefinition":
         if not self.client:
             raise ValueError("Client not set")
         w = self.client.agentflows.update(self.id, self, force=force)
         self.refresh_from_data(client=self.client, **w.model_dump())
         return w
 
-    async def aupdate(self, *, force: bool = False) -> "AgentFlowDefinition":
+    async def aupdate(self, force: bool = False) -> "AgentFlowDefinition":
         if not self.client:
             raise ValueError("Client not set")
         w = await self.client.agentflows.aupdate(self.id, self, force=force)
@@ -55,7 +55,7 @@ class AgentFlowDefinition(WorkflowDefinition):
                     "chat-balanced",
                     "gpt-4.1",
                     "claude-4-sonnet",
-                    "claude-3.7-sonnet-thinking",
+                    "claude-3.7-sonnet",
                     "claude-3.5-sonnet-v2",
                     "gemini-2.5-flash",
                     "gpt-4o",
@@ -78,7 +78,7 @@ class AgentFlowDefinition(WorkflowDefinition):
                     "chat-balanced",
                     "gpt-4.1",
                     "claude-4-sonnet",
-                    "claude-3.7-sonnet-thinking",
+                    "claude-3.7-sonnet",
                     "claude-3.5-sonnet-v2",
                     "gemini-2.5-flash",
                     "gpt-4o",
