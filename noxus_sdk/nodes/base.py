@@ -16,8 +16,10 @@ from noxus_sdk.nodes.schemas import (
 from noxus_sdk.nodes.types import NodeCategory
 
 if TYPE_CHECKING:
-    from noxus_sdk.nodes.connector import Connector
+    from noxus_sdk.nodes.connector import Connector, NodeDetail, AnyConnector
     from noxus_sdk.plugins.context import RemoteExecutionContext
+else:
+    AnyConnector = object
 
 
 class NodeConfiguration(BaseModel):
@@ -33,7 +35,8 @@ ConfigType = TypeVar("ConfigType", bound=NodeConfiguration)
 
 class BaseNode(Generic[ConfigType]):
     inputs: list[Connector]  # Will be set to an empty list if not set
-    outputs: list[Connector]  # Will be set to an empty list if not set
+    outputs: list[Connector]  # Connectable outputs only
+    details: list[NodeDetail]  # Display-only details (not connectable)
     node_name = "BaseNode"
     title = "Base Node"
     color = "#D5D5DE"
@@ -63,6 +66,19 @@ class BaseNode(Generic[ConfigType]):
 
         if not hasattr(cls, "outputs"):
             cls.outputs = []
+
+        if not hasattr(cls, "details"):
+            cls.details = []
+
+        # Validate no key name conflicts between outputs and details
+        output_names = {conn.name for conn in cls.outputs}
+        detail_names = {detail.name for detail in cls.details}
+        conflicts = output_names & detail_names
+        if conflicts:
+            raise ValueError(
+                f"Node {cls.__name__} has conflicting names between outputs and details: {', '.join(conflicts)}. "
+                "Output connector names and detail names must be unique."
+            )
 
         return super().__init_subclass__()
 
@@ -110,12 +126,23 @@ class BaseNode(Generic[ConfigType]):
                 ),
             )
 
+        # Serialize details
+        details = [
+            {
+                "name": detail.name,
+                "label": detail.label,
+                "display": detail.display.model_dump(),
+            }
+            for detail in cls.details
+        ]
+
         config = cls.get_config_class()
         config_dict = config.serialize()
 
         return NodeDefinition(
             inputs=inputs,
             outputs=outputs,
+            details=details,
             config=config_dict,
             type=cls.node_name,
             color=cls.color,

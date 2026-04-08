@@ -2,17 +2,14 @@ from __future__ import annotations
 
 import enum
 import uuid
-from collections.abc import Sequence  # noqa: TC003 — needed at runtime for Pydantic field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, AsyncIterator, Iterator, Sequence
 
 from pydantic import BaseModel, Field, TypeAdapter, model_validator
 from pydantic.config import ConfigDict
 
-from noxus_sdk.client import Client  # noqa: TC001 — needed at runtime for Pydantic field
+from noxus_sdk.client import Client
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Iterator
-
     from noxus_sdk.resources.runs import Run, RunEvent
     from noxus_sdk.resources.workflows import WorkflowVersion
 
@@ -229,9 +226,9 @@ class Node(BaseModel):
             if key not in connector_keys:
                 connector_keys.append(key)
             if input.type == "variable_type_size_connector":
-                assert type_definition is not None, (
-                    f"type_definition is required for variable_type_size_connector ({self.type}.{name})"
-                )
+                assert (
+                    type_definition is not None
+                ), f"type_definition is required for variable_type_size_connector ({self.type}.{name})"
                 type_definitions = connector_inputs[name].get("type_definitions", {})
                 choices = connector_inputs[name].get("choices", [])
                 if key not in type_definitions:
@@ -286,9 +283,9 @@ class Node(BaseModel):
             if key not in connector_keys:
                 connector_keys.append(key)
             if output.type == "variable_type_size_connector":
-                assert type_definition is not None, (
-                    f"type_definition is required for variable_type_size_connector ({self.type}.{name})"
-                )
+                assert (
+                    type_definition is not None
+                ), f"type_definition is required for variable_type_size_connector ({self.type}.{name})"
                 type_definitions = connector_outputs[name].get("type_definitions", {})
                 choices = connector_outputs[name].get("choices", [])
                 if key not in type_definitions:
@@ -306,7 +303,7 @@ class Node(BaseModel):
             )
         return EdgePoint(node_id=output.node_id, connector_name=output.name, key=None)
 
-    def create(self, x: int, y: int) -> Node:
+    def create(self, x: int, y: int) -> "Node":
         node_type = NODE_TYPES.get(self.type)
         assert node_type, f"Node type {self.type} not found"
         self.config_definition = node_type.config
@@ -356,8 +353,8 @@ class WorkflowDefinition(BaseModel):
     group_id: str | None = Field(default=None, exclude=True)
     name: str = "Untitled Workflow"
     type: str = "flow"
-    nodes: list[Node] = []
-    edges: list[Edge] = []
+    nodes: list["Node"] = []
+    edges: list["Edge"] = []
     x: int = 0
     error_handler: uuid.UUID | None = None
 
@@ -390,14 +387,14 @@ class WorkflowDefinition(BaseModel):
         self.client = client
         return self
 
-    def refresh(self) -> WorkflowDefinition:
+    def refresh(self) -> "WorkflowDefinition":
         if not self.client:
             raise ValueError("Client not set")
         response = self.client.get(f"/v1/workflows/{self.id}")
         self.refresh_from_data(client=self.client, **response)
         return self
 
-    async def arefresh(self) -> WorkflowDefinition:
+    async def arefresh(self) -> "WorkflowDefinition":
         if not self.client:
             raise ValueError("Client not set")
         response = await self.client.aget(f"/v1/workflows/{self.id}")
@@ -409,7 +406,7 @@ class WorkflowDefinition(BaseModel):
         body: dict[str, Any],
         workflow_version_id: uuid.UUID | str | None = None,
         callback_url: str | None = None,
-    ) -> Run:
+    ) -> "Run":
         from noxus_sdk.resources.runs import Run
 
         if not self.client:
@@ -429,7 +426,7 @@ class WorkflowDefinition(BaseModel):
         body: dict[str, Any],
         workflow_version_id: uuid.UUID | str | None = None,
         callback_url: str | None = None,
-    ) -> Run:
+    ) -> "Run":
         if not self.client:
             raise ValueError("Client not set")
         from noxus_sdk.resources.runs import Run
@@ -502,7 +499,7 @@ class WorkflowDefinition(BaseModel):
         version_id: str,
         name: str,
         description: str | None,
-    ) -> WorkflowVersion:
+    ) -> "WorkflowVersion":
         if not self.client:
             raise ValueError("Client not set")
         return self.client.workflows.update_version(
@@ -514,19 +511,19 @@ class WorkflowDefinition(BaseModel):
         version_id: str,
         name: str,
         description: str | None,
-    ) -> WorkflowVersion:
+    ) -> "WorkflowVersion":
         if not self.client:
             raise ValueError("Client not set")
         return await self.client.workflows.aupdate_version(
             self.id, version_id, name, description, self
         )
 
-    def list_versions(self) -> list[WorkflowVersion]:
+    def list_versions(self) -> list["WorkflowVersion"]:
         if not self.client:
             raise ValueError("Client not set")
         return self.client.workflows.list_versions(self.id)
 
-    async def alist_versions(self) -> list[WorkflowVersion]:
+    async def alist_versions(self) -> list["WorkflowVersion"]:
         if not self.client:
             raise ValueError("Client not set")
         return await self.client.workflows.alist_versions(self.id)
@@ -542,7 +539,7 @@ class WorkflowDefinition(BaseModel):
             "ChatAgentNode",
         ]
 
-    def node(self, name) -> Node:
+    def node(self, name) -> "Node":
         self.verify_name_legal(name)
         self.x += 350
         n = Node(id=str(uuid.uuid4()), type=name)
@@ -550,7 +547,7 @@ class WorkflowDefinition(BaseModel):
         self.nodes.append(n)
         return n
 
-    def link(self, from_node: EdgePoint, to_node: EdgePoint) -> Edge:
+    def link(self, from_node: EdgePoint, to_node: EdgePoint) -> "Edge":
         e = Edge(id=str(uuid.uuid4()), from_id=from_node, to_id=to_node)
         self.edges.append(e)
         return e
