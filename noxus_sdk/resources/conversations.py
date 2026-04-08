@@ -12,6 +12,7 @@ from pydantic import (
     Discriminator,
     Field,
     ValidationError,
+    field_validator,
     model_validator,
 )
 
@@ -21,10 +22,36 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Iterator
 
 
+def _tiptap_to_text(value: str | dict[str, str] | list[dict[str, str]] | None) -> str | None:
+    """Convert a TipTap rich-text payload (or plain string) to a plain string."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value or None
+    if isinstance(value, dict):
+        text = value.get("text", "")
+        return text or None
+    if isinstance(value, list):
+        return (
+            "".join(
+                part.get("text", "")
+                for part in value
+                if isinstance(part, dict)
+            )
+            or None
+        )
+    return None
+
+
 class ConversationTool(BaseModel):
     type: str
     enabled: bool = True
     extra_instructions: str | None = None
+
+    @field_validator("extra_instructions", mode="before")
+    @classmethod
+    def coerce_extra_instructions(cls, v: str | dict[str, str] | list[dict[str, str]] | None) -> str | None:
+        return _tiptap_to_text(v)
 
 
 class WebResearchTool(ConversationTool):
@@ -209,20 +236,7 @@ class ConversationSettings(BaseModel):
     def validate_text_fields(cls, data: Any) -> Any:
         if isinstance(data, dict):
             for field in ["persona", "tone", "extra_instructions"]:
-                value = data.get(field)
-                if value is None:
-                    continue
-                if isinstance(value, dict):
-                    data[field] = value.get("text")
-                elif isinstance(value, list):
-                    data[field] = (
-                        "".join(
-                            part.get("text", "")
-                            for part in value
-                            if isinstance(part, dict)
-                        )
-                        or None
-                    )
+                data[field] = _tiptap_to_text(data.get(field))
         return data
 
 
