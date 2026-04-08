@@ -121,8 +121,8 @@ class KnowledgeBaseDocument(BaseModel):
     name: str
     prefix: str
     status: DocumentStatus
-    size: int
-    source_type: str | None
+    size: int = 0
+    source_type: str | None = None
     created_at: str
     updated_at: str
     error: dict | None = None
