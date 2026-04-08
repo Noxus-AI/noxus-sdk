@@ -293,7 +293,7 @@ class ConversationFile(BaseModel):
     @model_validator(mode="after")
     def validate_content_url(self):
         if self.b64_content is None and self.url is None:
-            raise ValidationError("Either base64 content or url must be provided")
+            raise ValueError("Either base64 content or url must be provided")
         return self
 
 

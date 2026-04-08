@@ -554,7 +554,7 @@ class KnowledgeBaseService(BaseService[KnowledgeBase]):
             f"/v1/knowledge-bases/{knowledge_base_id}/documents/{status}",
             params=params,
         )
-        return [KnowledgeBaseDocument(**doc) for doc in response]
+        return [KnowledgeBaseDocument(**doc) for doc in response["items"]]
 
     async def alist_documents(
         self,
@@ -571,7 +571,7 @@ class KnowledgeBaseService(BaseService[KnowledgeBase]):
             f"/v1/knowledge-bases/{knowledge_base_id}/documents/{status}",
             params=params,
         )
-        return [KnowledgeBaseDocument(**doc) for doc in response]
+        return [KnowledgeBaseDocument(**doc) for doc in response["items"]]
 
     def create_document(
         self, knowledge_base_id: str, document: CreateDocument
