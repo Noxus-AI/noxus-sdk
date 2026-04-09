@@ -8,6 +8,13 @@ app = typer.Typer(
     help="Noxus CLI - Software development kit to extend the Noxus platform",
 )
 
+try:
+    from noxus_sdk.cli.commands.mcp import app as mcp_app
+
+    app.add_typer(mcp_app, name="mcp")
+except ImportError:
+    pass
+
 app.add_typer(plugin_app, name="plugin")
 
 

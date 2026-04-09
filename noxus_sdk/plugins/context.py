@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 from typing import Any, TYPE_CHECKING, Protocol
-
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
-    from noxus_sdk.files import File, SourceMetadata, SourceType
+    from noxus_sdk.files import File, SourceType, SourceMetadata
 
 
 class FileHelper(Protocol):
@@ -61,3 +60,5 @@ class RemoteExecutionContext(BaseModel):
 
 class RunExecutionContext(RemoteExecutionContext):
     """Alias for RemoteExecutionContext in plugin context"""
+
+    pass

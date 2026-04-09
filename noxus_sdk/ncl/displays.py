@@ -104,6 +104,7 @@ class ConfigSelect(BaseConfigDisplay):
     placeholder: str | None = None
     is_clearable: bool = False
     is_horizontal: bool = False
+    is_searchable: bool = True
 
 
 class ConfigChipsSelect(BaseConfigDisplay):
@@ -118,12 +119,7 @@ class ConfigMenuSelect(BaseConfigDisplay):
     values: list[Any]
     button_label: str | None = None
     button_variant: Literal[
-        "default",
-        "destructive",
-        "outline",
-        "secondary",
-        "ghost",
-        "link",
+        "default", "destructive", "outline", "secondary", "ghost", "link"
     ] = "default"
     button_size: Literal["default", "sm", "lg", "icon"] = "default"
     button_icon: str | None = None
@@ -158,6 +154,7 @@ class ConfigEnumSlider(BaseConfigDisplay):
 
 class ConfigCoworkerSelect(BaseConfigDisplay):
     type: Literal["coworker_select"] = "coworker_select"  # type: ignore
+    include_current_node: bool = False
 
 
 class ConfigUserSelector(BaseConfigDisplay):
@@ -183,6 +180,10 @@ class ConfigModelSelect(BaseConfigDisplay):
     type: Literal["model_select"] = "model_select"  # type: ignore
     endpoint: str
     model_type: str
+    show_presets: bool = True
+    show_inline_presets: bool = True
+    layout: Literal["stacked", "side_by_side"] = "stacked"
+    hide_disabled_models: bool = True
     model_config = PydanticConfigDict(protected_namespaces=())
 
 
@@ -335,16 +336,16 @@ class ConfigDictComplexList(BaseConfigDisplay):
 
 
 class ConfigDictComplexListStandalone(BaseConfigDisplay):
-    type: Literal["config_dict_complex_list_standalone"] = (
-        "config_dict_complex_list_standalone"  # type: ignore
+    type: Literal["config_dict_complex_list_standalone"] = (  # pyright: ignore[reportIncompatibleVariableOverride]
+        "config_dict_complex_list_standalone"
     )
     subtitle: str | None = None
     keys: list[ConfigDictEntry]
 
 
 class ConfigDictListWithoutConnector(BaseConfigDisplay):
-    type: Literal["config_dict_list_without_connector"] = (
-        "config_dict_list_without_connector"  # type: ignore
+    type: Literal["config_dict_list_without_connector"] = (  # pyright: ignore[reportIncompatibleVariableOverride]
+        "config_dict_list_without_connector"
     )
     key_label: str
     value_label: str
@@ -435,6 +436,42 @@ class ConfigToolsSelect(BaseConfigDisplay):
     show_sections: list[ToolSections] = ["QuickAction", "Flows", "Knowledge"]
 
 
+class ConfigAgentMemoryField(BaseConfigDisplay):
+    """Renders the agent memory toggle + stored memories list."""
+
+    type: Literal["agent_memory_field"] = "agent_memory_field"  # type: ignore
+
+
+class ConfigBaseToolsField(BaseConfigDisplay):
+    """Renders a list of quick-action toggles with per-tool config."""
+
+    type: Literal["base_tools_field"] = "base_tools_field"  # type: ignore
+
+
+class ConfigKnowledgeBasesField(BaseConfigDisplay):
+    """Renders KB list with picker + per-tool NCL config."""
+
+    type: Literal["knowledge_bases_field"] = "knowledge_bases_field"  # type: ignore
+
+
+class ConfigWorkflowsField(BaseConfigDisplay):
+    """Renders workflow list with picker + per-tool NCL config."""
+
+    type: Literal["workflows_field"] = "workflows_field"  # type: ignore
+
+
+class ConfigCoworkersField(BaseConfigDisplay):
+    """Renders coworker list with picker + per-tool NCL config."""
+
+    type: Literal["coworkers_field"] = "coworkers_field"  # type: ignore
+
+
+class ConfigActionsField(BaseConfigDisplay):
+    """Renders action list with picker + per-tool NCL config."""
+
+    type: Literal["actions_field"] = "actions_field"  # type: ignore
+
+
 # ========================================
 # UI DISPLAY COMPONENTS (NON-INPUT)
 # ========================================
@@ -457,6 +494,14 @@ class ConfigTextDisplay(BaseConfigDisplay):
     title: str | None = None
     text: str | None = None
     small_text: str | None = None
+
+
+class ConfigPlaybookEditor(BaseConfigDisplay):
+    """Visual editor for browser automation playbooks."""
+
+    type: Literal["playbook_editor"] = "playbook_editor"  # type: ignore
+    show_recorder_button: bool = True
+    show_test_button: bool = True
 
 
 AnyConfigDisplay = Annotated[
@@ -506,8 +551,14 @@ AnyConfigDisplay = Annotated[
     | ConfigGdrivePicker
     | ConfigOneDrivePicker
     | ConfigToolsSelect
+    | ConfigBaseToolsField
+    | ConfigKnowledgeBasesField
+    | ConfigWorkflowsField
+    | ConfigCoworkersField
+    | ConfigActionsField
     | ConfigDivider
     | ConfigBanner
-    | ConfigTextDisplay,
+    | ConfigTextDisplay
+    | ConfigPlaybookEditor,
     Field(discriminator="type"),
 ]
