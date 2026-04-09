@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from typing import Any
+from typing import Any, Sequence
 
 from pydantic import BaseModel
 
@@ -33,6 +32,7 @@ class NodeOutput(BaseModel):
 class NodeDefinition(BaseModel):
     inputs: list[NodeInput]
     outputs: list[NodeOutput]
+    details: list[dict] = []
     config: dict
     type: str
     color: str
@@ -60,6 +60,7 @@ class ConfigResponse(BaseModel):
     config: dict[str, dict]
     inputs: list[AnyConnector]
     outputs: list[AnyConnector]
+    details: list[dict] = []
     title: str | None = None
     ready: bool = False
     config_values: dict[str, Any] = {}

@@ -778,6 +778,98 @@ large_page = client.conversations.list(page=1, page_size=50)
 
 Pagination helps you manage large sets of data efficiently by retrieving only what you need.
 
+## MCP Server
+
+The Noxus SDK includes a built-in [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that exposes 39 tools across workflows, agents, conversations, knowledge bases, runs, files, and admin operations. This allows MCP-compatible clients like **Cursor**, **Claude Desktop**, or **Windsurf** to interact with the Noxus platform directly.
+
+### Local Usage (CLI)
+
+Start the MCP server locally using the `noxus` CLI:
+
+```bash
+# stdio transport (default — for local MCP clients)
+noxus mcp serve --api-key YOUR_API_KEY
+
+# SSE transport
+noxus mcp serve --transport sse --port 8888
+
+# Streamable HTTP transport (recommended for remote use)
+noxus mcp serve --transport http --port 8000 --path /mcp
+```
+
+Environment variables can be used instead of flags:
+
+| Variable | Description |
+|----------|-------------|
+| `NOXUS_API_KEY` | Platform API key (required for stdio/sse) |
+| `NOXUS_BACKEND_URL` | Backend URL (default: `https://backend.noxus.ai`) |
+
+### Production Deployment (ASGI)
+
+For production, use the ASGI entrypoint with uvicorn:
+
+```bash
+NOXUS_BACKEND_URL=http://backend:8080 \
+  uvicorn noxus_sdk.mcp.asgi:app --host 0.0.0.0 --port 8000
+```
+
+In production mode (`stateless_http=True`), the server does **not** require a pre-configured API key. Instead, each MCP client sends their own Noxus API key as `Authorization: Bearer <key>`, which is forwarded to the backend per-request. This means:
+
+- No shared secrets in the deployment
+- Each user authenticates with their own platform API key
+- Horizontal scaling works out of the box (stateless)
+
+Endpoints:
+
+- `POST /mcp` — Streamable HTTP MCP endpoint
+- `GET /health` — Health check endpoint
+
+A lightweight Dockerfile is provided at `noxus-sdk/Dockerfile`:
+
+```bash
+docker build -t noxus-mcp -f noxus-sdk/Dockerfile .
+docker run -p 8000:8000 \
+  -e NOXUS_BACKEND_URL=http://backend:8080 \
+  noxus-mcp
+```
+
+### Client Configuration
+
+#### Cursor
+
+Add to your Cursor MCP settings (`.cursor/mcp.json`). The Bearer token is your Noxus platform API key:
+
+```json
+{
+  "mcpServers": {
+    "noxus": {
+      "url": "https://mcp.your-domain.com/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_NOXUS_API_KEY"
+      }
+    }
+  }
+}
+```
+
+#### Claude Desktop
+
+For local stdio transport, add to your Claude Desktop config (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "noxus": {
+      "command": "noxus",
+      "args": ["mcp", "serve"],
+      "env": {
+        "NOXUS_API_KEY": "your_api_key"
+      }
+    }
+  }
+}
+```
+
 ## Troubleshooting
 
 Here are solutions to common issues you might encounter:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, ClassVar, Generic, Type, TypeVar, get_args
-
+from typing import Type, TypeVar, Generic, ClassVar, Any, get_args
 from pydantic import BaseModel
 
 from noxus_sdk.integrations.schemas import IntegrationDefinition

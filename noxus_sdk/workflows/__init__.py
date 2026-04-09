@@ -7,7 +7,7 @@ from noxus_sdk.workflows.workflow import (
 
 __all__ = [
     "AgentFlowDefinition",
-    "ConfigError",
     "WorkflowDefinition",
+    "ConfigError",
     "load_node_types",
 ]

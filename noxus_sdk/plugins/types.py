@@ -1,5 +1,6 @@
 """Plugin-specific types and enums"""
 
+from noxus_sdk.files import EmptyFile, File, SourceMetadata, SourceType
 from enum import Enum
 
 

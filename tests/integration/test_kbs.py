@@ -103,7 +103,6 @@ async def test_kb_cleanup(client: Client):
 
 
 @pytest.mark.anyio
-@pytest.mark.skip
 async def test_kb_training(client: Client, test_file: Path):
     settings = KBConfigV3()
 
