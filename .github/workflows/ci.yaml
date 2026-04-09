@@ -46,7 +46,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv pip install --system -e "." pytest pytest-asyncio
+        run: uv pip install --system -e "." pytest pytest-asyncio filelock
 
       - name: Run unit tests
         run: pytest tests/test_sdk_breakage.py tests/test_sdk_breakage_2.py tests/test_sdk_robustness.py tests/test_tiptap_coercion.py -x --tb=short
@@ -73,7 +73,7 @@ jobs:
         run: pytest tests/test_agents.py tests/test_conversation.py tests/test_kbs.py -x --tb=short
         env:
           NOXUS_API_KEY: ${{ secrets.NOXUS_API_KEY }}
-          NOXUS_BASE_URL: https://staging.backend.noxus.ai
+          NOXUS_BASE_URL: ${{ secrets.NOXUS_BASE_URL }}
 
   build:
     needs: [lint, unit-tests]
