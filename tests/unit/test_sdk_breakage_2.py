@@ -26,7 +26,7 @@ from noxus_sdk.resources.knowledge_bases import (
 )
 from noxus_sdk.resources.runs import Run, RunEvent
 from noxus_sdk.workflows.agentflow import AgentFlowDefinition
-from noxus_sdk.workflows.workflow import WorkflowDefinition
+from noxus_sdk.workflows.workflow import Node, WorkflowDefinition  # noqa: F401 — Node needed for model_rebuild
 
 # Resolve forward refs for Python 3.10 compat
 WorkflowDefinition.model_rebuild()
