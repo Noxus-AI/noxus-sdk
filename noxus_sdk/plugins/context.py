@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from typing import Any, TYPE_CHECKING, Protocol
 
 from pydantic import BaseModel
 
