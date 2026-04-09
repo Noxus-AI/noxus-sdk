@@ -26,6 +26,11 @@ from noxus_sdk.resources.knowledge_bases import (
 )
 from noxus_sdk.resources.runs import Run, RunEvent
 from noxus_sdk.workflows.agentflow import AgentFlowDefinition
+from noxus_sdk.workflows.workflow import WorkflowDefinition
+
+# Resolve forward refs for Python 3.10 compat
+WorkflowDefinition.model_rebuild()
+AgentFlowDefinition.model_rebuild()
 
 
 def _client():
