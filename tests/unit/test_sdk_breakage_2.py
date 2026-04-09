@@ -25,12 +25,14 @@ from noxus_sdk.resources.knowledge_bases import (
     DocumentStatus,
 )
 from noxus_sdk.resources.runs import Run, RunEvent
+import noxus_sdk.workflows.workflow as _wf
 from noxus_sdk.workflows.agentflow import AgentFlowDefinition
-from noxus_sdk.workflows.workflow import Node, WorkflowDefinition  # noqa: F401 — Node needed for model_rebuild
+from noxus_sdk.workflows.workflow import WorkflowDefinition
 
-# Resolve forward refs for Python 3.10 compat
-WorkflowDefinition.model_rebuild()
-AgentFlowDefinition.model_rebuild()
+# Resolve forward refs for Python 3.10 compat — all classes must be in scope
+_ns = vars(_wf)
+WorkflowDefinition.model_rebuild(_types_namespace=_ns)
+AgentFlowDefinition.model_rebuild(_types_namespace=_ns)
 
 
 def _client():
