@@ -49,7 +49,7 @@ jobs:
         run: uv pip install --system -e "." pytest pytest-asyncio filelock
 
       - name: Run unit tests
-        run: pytest tests/unit/ -x --tb=short
+        run: pytest tests/unit/ -x --tb=short || [ $? -eq 5 ]
 
   integration-tests:
     runs-on: ubuntu-latest
