@@ -53,23 +53,37 @@ jobs:
 
   integration-tests:
     runs-on: ubuntu-latest
-    # Skip entirely when NOXUS_API_KEY secret is not configured
-    if: ${{ secrets.NOXUS_API_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check secrets are configured
+        id: check-secrets
+        run: |
+          if [ -z "$NOXUS_API_KEY" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::NOXUS_API_KEY not set — skipping integration tests"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          NOXUS_API_KEY: ${{ secrets.NOXUS_API_KEY }}
+
       - name: Install uv
+        if: steps.check-secrets.outputs.skip == 'false'
         uses: astral-sh/setup-uv@v6
 
       - name: Set up Python
+        if: steps.check-secrets.outputs.skip == 'false'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install dependencies
+        if: steps.check-secrets.outputs.skip == 'false'
         run: uv pip install --system -e "." pytest pytest-asyncio pytest-subtests filelock
 
       - name: Run integration tests
+        if: steps.check-secrets.outputs.skip == 'false'
         run: pytest tests/test_agents.py tests/test_conversation.py tests/test_kbs.py -x --tb=short
         env:
           NOXUS_API_KEY: ${{ secrets.NOXUS_API_KEY }}
