@@ -37,9 +37,7 @@ class SourceType(str, Enum):
 
 class SourceMetadata(BaseModel):
     model_config = ConfigDict(
-        extra="allow",
-        arbitrary_types_allowed=True,
-        validate_assignment=True,
+        extra="allow", arbitrary_types_allowed=True, validate_assignment=True
     )
     rel_path: Optional[str] = None
 

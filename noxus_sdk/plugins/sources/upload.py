@@ -102,7 +102,7 @@ class UploadPluginSource(PluginSource, BaseModel):
 
         if not api_key:
             raise ValueError(
-                "PLUGIN_SERVER_PLATFORM_KEY environment variable is required",
+                "PLUGIN_SERVER_PLATFORM_KEY environment variable is required"
             )
 
         url = f"{platform_url}/plugin-server/files/{self.file_id}"

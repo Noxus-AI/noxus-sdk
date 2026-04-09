@@ -1,7 +1,7 @@
 """Node domain - everything related to node development and execution"""
 
 from noxus_sdk.nodes.base import BaseNode, NodeConfiguration
-from noxus_sdk.nodes.connector import Connector, DataContainer
+from noxus_sdk.nodes.connector import Connector, DataContainer, VariableConnector
 from noxus_sdk.nodes.schemas import (
     ConfigResponse,
     ExecutionResponse,
@@ -26,4 +26,5 @@ __all__ = [
     "NodeOutput",
     "TypeDefinition",
     "validate_node",
+    "VariableConnector",
 ]

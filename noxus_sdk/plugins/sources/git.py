@@ -108,7 +108,7 @@ class GitPluginSource(PluginSource, BaseModel):
         if any(pattern in error_text for pattern in auth_patterns):
             return GitAuthenticationError(
                 "Authentication failed. This may be a private repository - "
-                "please provide credentials.",
+                "please provide credentials."
             )
 
         # Repository not found errors
@@ -122,19 +122,19 @@ class GitPluginSource(PluginSource, BaseModel):
         if any(pattern in error_text for pattern in not_found_patterns):
             return GitRepositoryNotFoundError(
                 f"Repository not found: {self.repo_url}. "
-                "Check that the URL is correct and the repository exists.",
+                "Check that the URL is correct and the repository exists."
             )
 
         # Network/DNS errors
         if "could not resolve host" in error_text:
             return GitRepositoryNotFoundError(
                 f"Could not resolve host for {self.repo_url}. "
-                "Check your network connection.",
+                "Check your network connection."
             )
 
         # Fallback with original error for debugging
         return GitRepositoryNotFoundError(
-            f"Failed to clone repository {self.repo_url}: {error.stderr or error}",
+            f"Failed to clone repository {self.repo_url}: {error.stderr or error}"
         )
 
     async def _get_manifest_via_api(self) -> PluginManifest:
@@ -257,7 +257,7 @@ class GitPluginSource(PluginSource, BaseModel):
                 )
                 raise ManifestNotFoundError(
                     f"No manifest.json found in repository {self.repo_url}. "
-                    "This does not appear to be a valid Noxus plugin.",
+                    "This does not appear to be a valid Noxus plugin."
                 )
 
             async with aiofiles.open(manifest_file, encoding="utf-8") as f:

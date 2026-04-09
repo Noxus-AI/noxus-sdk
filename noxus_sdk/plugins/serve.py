@@ -1,7 +1,6 @@
 from __future__ import annotations
-
-import inspect
 import os
+import inspect
 import socket
 from typing import TYPE_CHECKING, Callable, cast
 
@@ -14,11 +13,11 @@ from uvicorn import Config, Server
 from noxus_sdk.nodes.schemas import ConfigResponse, ExecutionResponse
 from noxus_sdk.plugins.context import (
     FileHelper,
-    RemoteExecutionContext,
+    RemoteExecutionContext,  # noqa: TCH001 - For some reason ruff is not detecting the type hinting on responses, this cant be in the type check block
 )
 from noxus_sdk.plugins.exceptions import PluginValidationError
 from noxus_sdk.plugins.manifest import (
-    PluginManifest,
+    PluginManifest,  # noqa: TCH001 - For some reason ruff is not detecting the type hinting on responses, this cant be in the type check block
 )
 from noxus_sdk.plugins.validate import discover_and_load_plugin
 from noxus_sdk.schemas import ValidationResult
@@ -26,8 +25,8 @@ from noxus_sdk.schemas import ValidationResult
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from noxus_sdk.files import File, SourceMetadata, SourceType
     from noxus_sdk.plugins import BasePlugin
+    from noxus_sdk.files import File, SourceType, SourceMetadata
 
 
 class PluginFileHelper(FileHelper):
@@ -39,8 +38,7 @@ class PluginFileHelper(FileHelper):
 
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"{self.plugin_server_url}/files/{file.id}",
-                timeout=60.0,
+                f"{self.plugin_server_url}/files/{file.id}", timeout=60.0
             )
             response.raise_for_status()
             return response.content
@@ -76,9 +74,7 @@ class PluginFileHelper(FileHelper):
                 "source_metadata": source_metadata,
             }
             response = await client.post(
-                f"{self.plugin_server_url}/files/upload",
-                json=payload,
-                timeout=60.0,
+                f"{self.plugin_server_url}/files/upload", json=payload, timeout=60.0
             )
             response.raise_for_status()
             return response.json()
@@ -86,14 +82,13 @@ class PluginFileHelper(FileHelper):
 
 # Exception handler configuration: (status_code, error_message, detail_extractor)
 EXCEPTION_HANDLERS: dict[
-    type[Exception],
-    tuple[int, str, Callable[[Exception], str | list]],
+    type[Exception], tuple[int, str, Callable[[Exception], str | list]]
 ] = {
     ValueError: (400, "Bad Request", str),
     ValidationError: (
         422,
         "Validation Error",
-        lambda e: cast("ValidationError", e).errors(),
+        lambda e: cast(ValidationError, e).errors(),
     ),
     PluginValidationError: (400, "Plugin Validation Error", str),
     Exception: (500, "Internal Server Error", lambda _: "An unexpected error occurred"),

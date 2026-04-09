@@ -70,9 +70,9 @@ class AgentFlowDefinition(WorkflowDefinition):
 
         if not self.client:
             raise ValueError("Client not set")
-        return self.client.conversations.create(
-            self.id,
-            ConversationSettings(
+        return await self.client.conversations.acreate(
+            name=self.name,
+            settings=ConversationSettings(
                 agent_flow_id=self.id,
                 model=[
                     "chat-balanced",

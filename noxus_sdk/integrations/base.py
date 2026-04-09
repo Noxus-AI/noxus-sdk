@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, ClassVar, Generic, Type, TypeVar, get_args
-
+from typing import Type, TypeVar, Generic, ClassVar, Any, get_args
 from pydantic import BaseModel
 
 from noxus_sdk.integrations.schemas import IntegrationDefinition
@@ -61,7 +60,7 @@ class BaseIntegration(Generic[CredentialsType]):
             # so for backwards compatibility of any new credential that is migrated
             # we load from both sides
             return cls.credentials_class(**creds, **creds.get("data", {}))
-        except Exception:
+        except Exception as e:
             return None
 
     @classmethod

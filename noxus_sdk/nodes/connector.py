@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from copy import deepcopy
-from typing import Any, Generic, Literal, TypeGuard, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Literal, TypeGuard, TypeVar
 
 from loguru import logger
 from pydantic import (
@@ -15,6 +15,7 @@ from pydantic import (
 from pydantic.dataclasses import dataclass
 
 from noxus_sdk.ncl import AnyRule
+from noxus_sdk.ncl.details_display import AnyDetailsDisplay
 from noxus_sdk.nodes.types import DataType, TypeDefinition
 from noxus_sdk.utils.errors import UnexpectedError
 
@@ -337,3 +338,19 @@ class ConnectorAddress:
 
     def to_relative_address(self) -> RelativeAddress:
         return RelativeAddress(connector_name=self.connector_name, key=self.key)
+
+
+@dataclass
+class NodeDetail:
+    """Non-connectable execution information for display only."""
+
+    name: str  # Unique identifier
+    label: str  # Human-readable label
+    display: AnyDetailsDisplay  # How to render
+
+    def model_dump(self) -> dict:
+        return {
+            "name": self.name,
+            "label": self.label,
+            "display": self.display.model_dump(),
+        }
