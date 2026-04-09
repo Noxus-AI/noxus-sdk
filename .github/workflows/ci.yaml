@@ -49,7 +49,7 @@ jobs:
         run: uv pip install --system -e "." pytest pytest-asyncio filelock
 
       - name: Run unit tests
-        run: pytest tests/test_sdk_breakage.py tests/test_sdk_breakage_2.py tests/test_sdk_robustness.py tests/test_tiptap_coercion.py -x --tb=short
+        run: pytest tests/unit/ -x --tb=short
 
   integration-tests:
     runs-on: ubuntu-latest
@@ -59,14 +59,15 @@ jobs:
       - name: Check secrets are configured
         id: check-secrets
         run: |
-          if [ -z "$NOXUS_API_KEY" ]; then
+          if [ -z "$NOXUS_API_KEY" ] || [ -z "$NOXUS_BASE_URL" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "::warning::NOXUS_API_KEY not set — skipping integration tests"
+            echo "::warning::NOXUS_API_KEY or NOXUS_BASE_URL not set — skipping integration tests"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
         env:
           NOXUS_API_KEY: ${{ secrets.NOXUS_API_KEY }}
+          NOXUS_BASE_URL: ${{ secrets.NOXUS_BASE_URL }}
 
       - name: Install uv
         if: steps.check-secrets.outputs.skip == 'false'
@@ -84,7 +85,7 @@ jobs:
 
       - name: Run integration tests
         if: steps.check-secrets.outputs.skip == 'false'
-        run: pytest tests/test_agents.py tests/test_conversation.py tests/test_kbs.py -x --tb=short
+        run: pytest tests/integration/ -x --tb=short
         env:
           NOXUS_API_KEY: ${{ secrets.NOXUS_API_KEY }}
           NOXUS_BASE_URL: ${{ secrets.NOXUS_BASE_URL }}
