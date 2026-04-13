@@ -226,9 +226,13 @@ class Node(BaseModel):
             if key not in connector_keys:
                 connector_keys.append(key)
             if input.type == "variable_type_size_connector":
-                assert type_definition is not None, (
-                    f"type_definition is required for variable_type_size_connector ({self.type}.{name})"
-                )
+                if type_definition is None:
+                    # Auto-detect from the connector's first choice (usually "str")
+                    choices = connector_inputs[name].get("choices", [])
+                    if choices:
+                        type_definition = choices[0].get("data_type", "str")
+                    else:
+                        type_definition = "str"
                 type_definitions = connector_inputs[name].get("type_definitions", {})
                 choices = connector_inputs[name].get("choices", [])
                 if key not in type_definitions:
@@ -283,9 +287,9 @@ class Node(BaseModel):
             if key not in connector_keys:
                 connector_keys.append(key)
             if output.type == "variable_type_size_connector":
-                assert type_definition is not None, (
-                    f"type_definition is required for variable_type_size_connector ({self.type}.{name})"
-                )
+                assert (
+                    type_definition is not None
+                ), f"type_definition is required for variable_type_size_connector ({self.type}.{name})"
                 type_definitions = connector_outputs[name].get("type_definitions", {})
                 choices = connector_outputs[name].get("choices", [])
                 if key not in type_definitions:
@@ -326,14 +330,14 @@ class Node(BaseModel):
 
     def config(self, **kwargs):
         for key, value in kwargs.items():
-            if key not in self.config_definition:
-                raise ConfigError(
-                    f"Invalid config key: {key} (possible: {[k for k, v in self.config_definition.items() if v.visible]})"
-                )
-            self.config_definition[key].check_value(key, value)
+            if key in self.config_definition:
+                self.config_definition[key].check_value(key, value)
+            # Accept unknown keys (e.g. kb_id for KB nodes) — these come from
+            # dynamic config_endpoint resolution that the SDK doesn't perform.
+            # The backend validates them on save/execution.
             self.node_config[key] = value
         for k, v in self.config_definition.items():
-            if k not in self.node_config:
+            if k not in self.node_config and v.visible:
                 v.check_value(k, None)
         return self
 
@@ -350,7 +354,7 @@ class WorkflowDefinition(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     client: Client | None = Field(default=None, exclude=True)
     id: str = ""
-    group_id: str | None = Field(default=None, exclude=True)
+    group_id: str | None = Field(default=None)
     name: str = "Untitled Workflow"
     type: str = "flow"
     nodes: list["Node"] = []
