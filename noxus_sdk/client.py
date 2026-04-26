@@ -237,6 +237,7 @@ class Requester:
         files: RequestFiles = None,
         params: dict | None = None,
         timeout: int | None = None,
+        method: str = "GET",
     ) -> Iterator[ServerSentEvent]:
         headers_ = {"X-API-Key": self.api_key}
         if headers:
@@ -248,7 +249,7 @@ class Requester:
             while ratelimited:
                 with connect_sse(
                     client=client,
-                    method="GET",
+                    method=method,
                     url=f"{self.base_url}{url}",
                     headers=headers_,
                     follow_redirects=True,
@@ -269,6 +270,7 @@ class Requester:
         files: RequestFiles = None,
         params: dict | None = None,
         timeout: int | None = None,
+        method: str = "GET",
     ) -> AsyncIterator[ServerSentEvent]:
         headers_ = {"X-API-Key": self.api_key}
         if headers:
@@ -280,7 +282,7 @@ class Requester:
             while ratelimited:
                 async with aconnect_sse(
                     client=client,
-                    method="GET",
+                    method=method,
                     url=f"{self.base_url}{url}",
                     headers=headers_,
                     follow_redirects=True,

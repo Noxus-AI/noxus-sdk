@@ -278,6 +278,7 @@ class ConfigRichTextVariables(BaseConfigDisplay):
     hide_toolbar: bool = False
     is_simple_text: bool = False
     no_space_on_insert: bool = False
+    hide_chip_options: bool = False
 
 
 class ConfigRichTextVariablesAI(BaseConfigDisplay):
@@ -371,7 +372,38 @@ class ConfigDynamicText(BaseConfigDisplay):
 
 
 class ConfigDynamicSelect(BaseConfigDisplay):
+    """A select whose options are derived from another config field's metadata.
+
+    Use when the valid options depend on a choice the user made in another
+    field — e.g. an embedding-dimension picker that must reflect what the
+    currently-selected embedding model supports.
+
+    Contract for frontend renderers:
+    - Read `source_field` from the form state — typically a `ConfigModelSelect`
+      field so its cached metadata list is available client-side.
+    - Look up the currently-selected item in that cached list.
+    - Read `source_attribute` on the resolved item: it must be a `list` of
+      primitive values (ints, strings) to render as options.
+    - If `source_field` is empty or `source_attribute` is null/empty on the
+      resolved item, fall back to `fallback_values` (render nothing if that
+      is empty too). This is how the UI handles models without the attribute.
+    """
+
     type: Literal["config_dynamic_select"] = "config_dynamic_select"  # type: ignore
+    source_field: str
+    """Name of the other config field to read the selection from."""
+    source_attribute: str
+    """Attribute on the resolved source item whose list value becomes the options."""
+    endpoint: str
+    """Backend endpoint that returns the catalog of items for `source_field` —
+    typically the same endpoint the source field's `ConfigModelSelect` uses
+    (e.g. `/models/embeddings`). The renderer fetches this, matches against
+    the selected source value, and reads `source_attribute` off the match."""
+    fallback_values: list[Any] = []
+    """Used when the source field is empty or its attribute is null/empty."""
+    placeholder: str | None = None
+    is_clearable: bool = True
+    is_searchable: bool = False
 
 
 class ConfigSearchBar(BaseConfigDisplay):

@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime  # noqa: TC003
 from typing import Annotated, Any, Literal, TYPE_CHECKING
 
 from uuid import UUID, uuid4
 
+from httpx_sse import ServerSentEvent  # noqa: TC002 — runtime-imported for clarity
 from pydantic import (
     AliasChoices,
     BaseModel,
     ConfigDict,
     Discriminator,
     Field,
+    JsonValue,
     Tag,
     ValidationError,
     field_validator,
@@ -317,6 +320,49 @@ class ChatMessage(BaseModel):
     parts: list[dict]
 
 
+class StreamEvent(BaseModel):
+    """A single event yielded by `Conversation.stream()` / `astream()`.
+
+    `event` is the SSE event name (e.g. ``"text-delta"``, ``"finish-step"``,
+    ``"error"``). For ``format="json"`` requests the backend normalises this
+    into ``{"event": ..., "data": ...}`` envelopes; for ``format="vercel"``
+    requests the raw pydantic-ai frame is exposed as `data` and the SSE event
+    name is propagated to `event` (defaulting to ``"message"`` when absent).
+    """
+
+    event: str
+    data: JsonValue
+
+
+def _sse_to_stream_event(sse: ServerSentEvent, format: str) -> StreamEvent:
+    """Decode one ``ServerSentEvent`` into a typed :class:`StreamEvent`.
+
+    For ``format="json"`` the backend wraps every frame in a
+    ``{"event", "data"}`` envelope under a stable ``event: message`` SSE name,
+    so we unwrap that envelope. For ``format="vercel"`` the raw pydantic-ai
+    frame data is yielded as-is, with the SSE event name propagated.
+    """
+    if format == "json":
+        payload = sse.data or ""
+        try:
+            envelope: JsonValue = json.loads(payload) if payload else {}
+        except json.JSONDecodeError:
+            envelope = {}
+        if isinstance(envelope, dict) and "event" in envelope:
+            return StreamEvent(
+                event=str(envelope.get("event") or "message"),
+                data=envelope.get("data"),
+            )
+        return StreamEvent(event=sse.event or "message", data=envelope or payload)
+
+    data: JsonValue
+    try:
+        data = json.loads(sse.data) if sse.data else None
+    except json.JSONDecodeError:
+        data = sse.data
+    return StreamEvent(event=sse.event or "message", data=data)
+
+
 class Conversation(BaseResource):
     model_config = ConfigDict(validate_assignment=True)
 
@@ -365,35 +411,38 @@ class Conversation(BaseResource):
         self._update_w_response(response)
         return self
 
-    def iter_messages(self) -> Iterator[MessageEvent]:
-        resp = self.client.event_stream(
-            f"/v1/conversations/{self.id}/events"
-            + ("?etag=" + self.etag if self.etag else "")
-        )
-        for event in resp:
-            message = MessageEvent.model_validate_json(event.data)
-            if message.role == "user":
-                continue
-            if message.type == "conversation_end":
-                yield message
-                break
-            yield message
-            self.refresh()
+    def iter_messages(self) -> Iterator[StreamEvent]:
+        """Tail the SSE event stream of the conversation's in-progress run.
 
-    async def aiter_messages(self) -> AsyncIterator[MessageEvent]:
-        resp = self.client.aevent_stream(
-            f"/v1/conversations/{self.id}/events"
-            + ("?etag=" + self.etag if self.etag else "")
+        Yields normalised :class:`StreamEvent` envelopes (matching
+        :meth:`stream`'s ``format="json"`` output). Stops on the terminal
+        ``done`` event the backend emits when the run finishes.
+        """
+        params = {"format": "json"}
+        if self.etag:
+            params["etag"] = self.etag
+        resp = self.client.event_stream(
+            f"/v1/conversations/{self.id}/events",
+            params=params,
         )
-        async for event in resp:
-            message = MessageEvent.model_validate_json(event.data)
-            if message.role == "user":
-                continue
-            if message.type == "conversation_end":
-                yield message
+        for sse in resp:
+            if sse.event == "done":
                 break
-            yield message
-            await self.arefresh()
+            yield _sse_to_stream_event(sse, "json")
+
+    async def aiter_messages(self) -> AsyncIterator[StreamEvent]:
+        """Async variant of :meth:`iter_messages`."""
+        params = {"format": "json"}
+        if self.etag:
+            params["etag"] = self.etag
+        resp = self.client.aevent_stream(
+            f"/v1/conversations/{self.id}/events",
+            params=params,
+        )
+        async for sse in resp:
+            if sse.event == "done":
+                break
+            yield _sse_to_stream_event(sse, "json")
 
     def add_message(self, message: MessageRequest) -> Message:
         response = self.client.post(
@@ -406,6 +455,52 @@ class Conversation(BaseResource):
             raise ValueError("No response from the server")
 
         return Message.model_validate(self.messages[-1])
+
+    def stream(
+        self,
+        message: MessageRequest,
+        format: Literal["vercel", "json"] = "json",
+    ) -> Iterator[StreamEvent]:
+        """Send a message and stream agent events back over a single request.
+
+        With ``format="json"`` (default) each yielded :class:`StreamEvent` is a
+        normalised envelope with the underlying pydantic-ai event name and
+        parsed JSON payload. With ``format="vercel"`` the raw Vercel AI SDK
+        frames are forwarded — `data` will typically be a JSON string.
+        """
+        resp = self.client.event_stream(
+            f"/v1/conversations/{self.id}/stream",
+            method="POST",
+            json=message.model_dump(),
+            params={"format": format},
+            timeout=600,
+        )
+        for sse in resp:
+            if sse.event in ("done", "timeout"):
+                if sse.event == "timeout":
+                    yield StreamEvent(event="timeout", data=None)
+                break
+            yield _sse_to_stream_event(sse, format)
+
+    async def astream(
+        self,
+        message: MessageRequest,
+        format: Literal["vercel", "json"] = "json",
+    ) -> AsyncIterator[StreamEvent]:
+        """Async variant of :meth:`stream`."""
+        resp = self.client.aevent_stream(
+            f"/v1/conversations/{self.id}/stream",
+            method="POST",
+            json=message.model_dump(),
+            params={"format": format},
+            timeout=600,
+        )
+        async for sse in resp:
+            if sse.event in ("done", "timeout"):
+                if sse.event == "timeout":
+                    yield StreamEvent(event="timeout", data=None)
+                break
+            yield _sse_to_stream_event(sse, format)
 
     def chat(self, message: MessageRequest) -> ChatMessage:
         response = self.client.post(
