@@ -40,6 +40,7 @@ class SourceMetadata(BaseModel):
         extra="allow", arbitrary_types_allowed=True, validate_assignment=True
     )
     rel_path: Optional[str] = None
+    external_id: Optional[str] = None
 
 
 class File(BaseModel):

@@ -237,18 +237,18 @@ class Requester:
         files: RequestFiles = None,
         params: dict | None = None,
         timeout: int | None = None,
+        method: str = "GET",
     ) -> Iterator[ServerSentEvent]:
         headers_ = {"X-API-Key": self.api_key}
         if headers:
             headers_.update(headers)
         if self.extra_headers:
             headers_.update(self.extra_headers)
-        ratelimited = True
         with httpx.Client() as client:
-            while ratelimited:
+            while True:
                 with connect_sse(
                     client=client,
-                    method="GET",
+                    method=method,
                     url=f"{self.base_url}{url}",
                     headers=headers_,
                     follow_redirects=True,
@@ -257,9 +257,12 @@ class Requester:
                     params=params,
                     timeout=timeout or 120,
                 ) as response:
-                    ratelimited = False
+                    if response.response.status_code == 429:
+                        time.sleep(1)
+                        continue
+                    response.response.raise_for_status()
                     yield from response.iter_sse()
-        raise RequestFailedError("Request failed")
+                    return
 
     async def aevent_stream(
         self,
@@ -269,18 +272,18 @@ class Requester:
         files: RequestFiles = None,
         params: dict | None = None,
         timeout: int | None = None,
+        method: str = "GET",
     ) -> AsyncIterator[ServerSentEvent]:
         headers_ = {"X-API-Key": self.api_key}
         if headers:
             headers_.update(headers)
         if self.extra_headers:
             headers_.update(self.extra_headers)
-        ratelimited = True
         async with httpx.AsyncClient() as client:
-            while ratelimited:
+            while True:
                 async with aconnect_sse(
                     client=client,
-                    method="GET",
+                    method=method,
                     url=f"{self.base_url}{url}",
                     headers=headers_,
                     follow_redirects=True,
@@ -289,10 +292,13 @@ class Requester:
                     params=params,
                     timeout=timeout or 120,
                 ) as response:
-                    ratelimited = False
+                    if response.response.status_code == 429:
+                        await asyncio.sleep(1)
+                        continue
+                    response.response.raise_for_status()
                     async for event in response.aiter_sse():
                         yield event
-        raise RequestFailedError("Request failed")
+                    return
 
     def get(
         self,
