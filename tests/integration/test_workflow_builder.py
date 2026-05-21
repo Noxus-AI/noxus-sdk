@@ -7,9 +7,12 @@ from noxus_sdk.workflows import ConfigError, WorkflowDefinition
 def test_generate_text(client: Client):
     workflow = WorkflowDefinition(client=client, id="123")
     n = workflow.node("TextGenerationNode")
+    # Unknown keys are accepted as passthrough (e.g. kb_id for dynamic config),
+    # but required visible fields are still checked
     with pytest.raises(ConfigError) as exc:
         n.config(foo="bar")
-    assert str(exc.value).startswith("Invalid config key: foo (possible:")
+    assert str(exc.value).startswith("Missing required config value for ")
+    assert n.node_config["foo"] == "bar"
     with pytest.raises(ConfigError) as exc:
         n.config(label="Test")
     assert str(exc.value).startswith("Missing required config value for ")
