@@ -21,6 +21,4 @@ class {{ cookiecutter.__package_name.replace('-', ' ').title().replace(' ', '') 
     image: str = (
         "https://storage.googleapis.com/image-storage-spot-manual/app/noxus-o.svg"
     )
-    key: str = "{{ cookiecutter.__package_name }}"
-    authorized: bool = False
 

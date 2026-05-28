@@ -25,10 +25,10 @@ jobs:
       # ruff is pinned: must match the version in uv.lock so formatting
       # stays identical to the platform repo that syncs into this one.
       - name: Lint check
-        run: uvx ruff@0.12.7 check .
+        run: uvx ruff@0.6.3 check .
 
       - name: Format check
-        run: uvx ruff@0.12.7 format --check .
+        run: uvx ruff@0.6.3 format --check .
 
   unit-tests:
     runs-on: ubuntu-latest

@@ -294,6 +294,58 @@ class KnowledgeBase(BaseResource):
             params={"prefix": prefix},
         )
 
+    def get_tree(self, folder: str = "/", max_depth: int = 3) -> str:
+        response = self.client.get(
+            f"/v1/knowledge-bases/{self.id}/tree",
+            params={"folder": folder, "max_depth": max_depth},
+        )
+        return response  # type: ignore[return-value]
+
+    async def aget_tree(self, folder: str = "/", max_depth: int = 3) -> str:
+        response = await self.client.aget(
+            f"/v1/knowledge-bases/{self.id}/tree",
+            params={"folder": folder, "max_depth": max_depth},
+        )
+        return response  # type: ignore[return-value]
+
+    def list_folder(self, folder: str = "/") -> str:
+        response = self.client.get(
+            f"/v1/knowledge-bases/{self.id}/ls",
+            params={"folder": folder},
+        )
+        return response  # type: ignore[return-value]
+
+    async def alist_folder(self, folder: str = "/") -> str:
+        response = await self.client.aget(
+            f"/v1/knowledge-bases/{self.id}/ls",
+            params={"folder": folder},
+        )
+        return response  # type: ignore[return-value]
+
+    def search_documents(
+        self, query: str, prefix: str | None = None, limit: int = 25
+    ) -> builtins.list[KnowledgeBaseDocument]:
+        params: dict[str, str | int] = {"query": query, "limit": limit}
+        if prefix is not None:
+            params["prefix"] = prefix
+        response = self.client.get(
+            f"/v1/knowledge-bases/{self.id}/documents/search",
+            params=params,
+        )
+        return [KnowledgeBaseDocument(**doc) for doc in response]
+
+    async def asearch_documents(
+        self, query: str, prefix: str | None = None, limit: int = 25
+    ) -> builtins.list[KnowledgeBaseDocument]:
+        params: dict[str, str | int] = {"query": query, "limit": limit}
+        if prefix is not None:
+            params["prefix"] = prefix
+        response = await self.client.aget(
+            f"/v1/knowledge-bases/{self.id}/documents/search",
+            params=params,
+        )
+        return [KnowledgeBaseDocument(**doc) for doc in response]
+
     def search(self, query: str, prefix: str = "/") -> builtins.list[SearchResult]:
         response = self.client.post(
             f"/v1/knowledge-bases/{self.id}/search",
@@ -447,6 +499,24 @@ class KnowledgeBaseService(BaseService[KnowledgeBase]):
 
         return KnowledgeBase(client=self.client, **knowledge_base)
 
+    def search(
+        self, knowledge_base_id: str, query: str, prefix: str = "/"
+    ) -> builtins.list[SearchResult]:
+        response = self.client.post(
+            f"/v1/knowledge-bases/{knowledge_base_id}/search",
+            params={"query": query, "prefix": prefix},
+        )
+        return [SearchResult(**result) for result in response]
+
+    async def asearch(
+        self, knowledge_base_id: str, query: str, prefix: str = "/"
+    ) -> builtins.list[SearchResult]:
+        response = await self.client.apost(
+            f"/v1/knowledge-bases/{knowledge_base_id}/search",
+            params={"query": query, "prefix": prefix},
+        )
+        return [SearchResult(**result) for result in response]
+
     def delete(self, knowledge_base_id: str) -> bool:
         response = self.client.delete(f"/v1/knowledge-bases/{knowledge_base_id}")
         return response["success"]
@@ -454,6 +524,70 @@ class KnowledgeBaseService(BaseService[KnowledgeBase]):
     async def adelete(self, knowledge_base_id: str) -> bool:
         response = await self.client.adelete(f"/v1/knowledge-bases/{knowledge_base_id}")
         return response["success"]
+
+    def get_tree(
+        self, knowledge_base_id: str, folder: str = "/", max_depth: int = 3
+    ) -> str:
+        response = self.client.get(
+            f"/v1/knowledge-bases/{knowledge_base_id}/tree",
+            params={"folder": folder, "max_depth": max_depth},
+        )
+        return response  # type: ignore[return-value]
+
+    async def aget_tree(
+        self, knowledge_base_id: str, folder: str = "/", max_depth: int = 3
+    ) -> str:
+        response = await self.client.aget(
+            f"/v1/knowledge-bases/{knowledge_base_id}/tree",
+            params={"folder": folder, "max_depth": max_depth},
+        )
+        return response  # type: ignore[return-value]
+
+    def list_folder(self, knowledge_base_id: str, folder: str = "/") -> str:
+        response = self.client.get(
+            f"/v1/knowledge-bases/{knowledge_base_id}/ls",
+            params={"folder": folder},
+        )
+        return response  # type: ignore[return-value]
+
+    async def alist_folder(self, knowledge_base_id: str, folder: str = "/") -> str:
+        response = await self.client.aget(
+            f"/v1/knowledge-bases/{knowledge_base_id}/ls",
+            params={"folder": folder},
+        )
+        return response  # type: ignore[return-value]
+
+    def search_documents(
+        self,
+        knowledge_base_id: str,
+        query: str,
+        prefix: str | None = None,
+        limit: int = 25,
+    ) -> builtins.list[KnowledgeBaseDocument]:
+        params: dict[str, str | int] = {"query": query, "limit": limit}
+        if prefix is not None:
+            params["prefix"] = prefix
+        response = self.client.get(
+            f"/v1/knowledge-bases/{knowledge_base_id}/documents/search",
+            params=params,
+        )
+        return [KnowledgeBaseDocument(**doc) for doc in response]
+
+    async def asearch_documents(
+        self,
+        knowledge_base_id: str,
+        query: str,
+        prefix: str | None = None,
+        limit: int = 25,
+    ) -> builtins.list[KnowledgeBaseDocument]:
+        params: dict[str, str | int] = {"query": query, "limit": limit}
+        if prefix is not None:
+            params["prefix"] = prefix
+        response = await self.client.aget(
+            f"/v1/knowledge-bases/{knowledge_base_id}/documents/search",
+            params=params,
+        )
+        return [KnowledgeBaseDocument(**doc) for doc in response]
 
     def get_runs(
         self,
