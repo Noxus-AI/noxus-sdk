@@ -1,11 +1,9 @@
 [project]
 name = "noxus-sdk"
-version = "0.5.0"
+version = "0.5.2"
 description = "Software development kit to extend the Noxus platform"
 requires-python = ">=3.10"
 readme = "README.md"
-homepage = "https://noxus.ai"
-repository = "https://github.com/Noxus-AI/noxus-sdk"
 keywords = ["noxus", "sdk", "plugin", "development"]
 authors = [
     { name = "Noxus Team", email = "support@noxus.ai" }
@@ -35,26 +33,22 @@ dependencies = [
     "aiofiles"
 ]
 
+[project.urls]
+Homepage = "https://noxus.ai"
+Repository = "https://github.com/Noxus-AI/noxus-sdk"
+
 [project.scripts]
 noxus = "noxus_sdk.cli.main:main"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=75.0", "wheel"]
+build-backend = "setuptools.build_meta"
 
-[tool.hatch.build.targets.wheel]
-packages = ["noxus_sdk"]
+[tool.setuptools.packages.find]
+include = ["noxus_sdk*"]
 
-
-[tool.hatch.envs.hatch-test]
-dependencies = [
-    "pytest>=8.3.3",
-    "pytest-subtests==0.13.1",
-    "pytest-asyncio==0.24.0",
-    "pytest-cov>=6.0.0",
-    "pytest-xdist>=3.0.0",
-    "filelock",
-]
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
 
 [dependency-groups]
 dev = [
