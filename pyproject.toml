@@ -1,3 +1,16 @@
+# Canonical pyproject.toml for the public Noxus-AI/noxus-sdk repo.
+#
+# This is the source of truth for the PUBLISHED package's build configuration
+# and dependencies. scripts/sync_sdk.py copies it into the public repo on every
+# sync, PRESERVING the public repo's existing `version` (releases are cut there
+# with bump2version, so the sync must never change the version).
+#
+# Differences vs the internal noxus-sdk/pyproject.toml are intentional:
+#   - build backend is hatchling (includes ALL package data: NCL modules AND the
+#     cookiecutter plugin templates — setuptools' packages.find dropped both)
+#   - `fastmcp` is omitted (the noxus_sdk/mcp module is internal-only and excluded
+#     from the sync), while `rapidfuzz` IS required (noxus_sdk/documentation.py,
+#     which is synced publicly, imports it).
 [project]
 name = "noxus-sdk"
 version = "0.5.3"
@@ -29,6 +42,7 @@ dependencies = [
     "pillow>=11.3.0",
     "markdownify>=1.1.0",
     "async-lru>=2.0.5",
+    "rapidfuzz>=3.0.0",
     "httpx-sse",
     "aiofiles"
 ]
@@ -41,11 +55,11 @@ Repository = "https://github.com/Noxus-AI/noxus-sdk"
 noxus = "noxus_sdk.cli.main:main"
 
 [build-system]
-requires = ["setuptools>=75.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.setuptools.packages.find]
-include = ["noxus_sdk*"]
+[tool.hatch.build.targets.wheel]
+packages = ["noxus_sdk"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

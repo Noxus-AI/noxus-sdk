@@ -30,10 +30,7 @@ def workspace_client():
             for workspace in client.admin.list_workspaces():
                 if workspace.name.startswith("sdk-"):
                     print("Deleting", workspace.name)
-                    try:
-                        workspace.delete()
-                    except Exception as e:
-                        print(f"Failed to delete {workspace.name}: {e}")
+                    workspace.delete()
             fn.touch()
 
     return client
@@ -44,10 +41,7 @@ def api_key(workspace_client: Client):
     workspace = workspace_client.admin.create_workspace(f"sdk-{uuid.uuid4()}")
     api_key = workspace.add_api_key("test_key")
     yield api_key.value
-    try:
-        workspace.delete()
-    except Exception as e:
-        print(f"Failed to delete workspace during teardown: {e}")
+    workspace.delete()
 
 
 @pytest.fixture

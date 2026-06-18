@@ -123,6 +123,8 @@ class KnowledgeBaseDocument(BaseModel):
     status: DocumentStatus
     size: int = 0
     source_type: str | None = None
+    file_id: str | None = None
+    content_type: str | None = None
     created_at: str
     updated_at: str
     error: dict | None = None
@@ -638,6 +640,20 @@ class KnowledgeBaseService(BaseService[KnowledgeBase]):
             f"/v1/knowledge-bases/{knowledge_base_id}/document/{document_id}"
         )
         return KnowledgeBaseDocument(**response)
+
+    def download_document(self, knowledge_base_id: str, document_id: str) -> bytes:
+        document = self.get_document(knowledge_base_id, document_id)
+        if document.file_id is None:
+            raise ValueError(f"Document {document_id} has no downloadable file")
+        return self.client.files.get(document.file_id)
+
+    async def adownload_document(
+        self, knowledge_base_id: str, document_id: str
+    ) -> bytes:
+        document = await self.aget_document(knowledge_base_id, document_id)
+        if document.file_id is None:
+            raise ValueError(f"Document {document_id} has no downloadable file")
+        return await self.client.files.aget(document.file_id)
 
     def update_document(
         self, knowledge_base_id: str, document_id: str, update: UpdateDocument

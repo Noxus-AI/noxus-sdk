@@ -44,6 +44,9 @@ class NodeDefinition(BaseModel):
     category: str | None = None
     sub_category: str | None = None
     example: str | None = None
+    # Node-author guidance aimed at AI agents (Genie / MCP callers).
+    # See ``noxus.nodes.BaseNode.ai_instructions`` for the contract.
+    ai_instructions: str | None = None
     integrations: Sequence[str | list[str]] | None = None
     providers: list[str] | None = None
     knowledge_base_support: list[str] | None = None

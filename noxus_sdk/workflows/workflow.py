@@ -123,6 +123,9 @@ class NodeDefinition(BaseModel):
     is_available: bool
     visible: bool
     config_endpoint: str | None
+    example: str | None = None
+    documentation_url: str | None = None
+    ai_instructions: str | None = None
 
 
 NODE_TYPES: dict[str, NodeDefinition] = {}

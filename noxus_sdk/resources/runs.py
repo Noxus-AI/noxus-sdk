@@ -185,7 +185,17 @@ class RunService(BaseService[Run]):
         response = await self.client.aget(f"/v1/workflows/{workflow_id}/runs/{run_id}")
         return Run(client=self.client, **response)
 
-    def list(self, workflow_id: str, page: int = 1, page_size: int = 10) -> list[Run]:
+    def get_node_io(self, run_id: str, node_id: str, it: int = 0) -> dict:
+        return self.client.get(f"/v1/runs/{run_id}/io/{node_id}", params={"it": it})
+
+    async def aget_node_io(self, run_id: str, node_id: str, it: int = 0) -> dict:
+        return await self.client.aget(
+            f"/v1/runs/{run_id}/io/{node_id}", params={"it": it}
+        )
+
+    def list(
+        self, workflow_id: str, page: int = 1, page_size: int = 10
+    ) -> builtins.list[Run]:
         response = self.client.pget(
             f"/v1/workflows/{workflow_id}/runs",
             params={"page": page, "page_size": page_size},

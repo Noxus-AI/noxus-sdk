@@ -1,3 +1,6 @@
+# Canonical CI for the public Noxus-AI/noxus-sdk repo.
+# Source of truth lives in the platform repo (scripts/sdk_sync_assets/ci.yaml)
+# and is copied to .github/workflows/ci.yaml by scripts/sync_sdk.py.
 name: CI
 
 on:
@@ -106,11 +109,25 @@ jobs:
 
       - name: Install build dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install build setuptools wheel
+          python -m pip install --upgrade pip build
 
       - name: Build package
         run: python -m build
+
+      # Release gate: install the BUILT WHEEL (not editable) and exercise the
+      # packaging-sensitive paths. An editable install hides missing package
+      # data and undeclared deps; this catches them before they ship to PyPI.
+      - name: Smoke-test built wheel
+        run: |
+          set -euxo pipefail
+          python -m venv /tmp/wheel-test
+          /tmp/wheel-test/bin/pip install dist/*.whl
+          # CLI imports + plugin templates are packaged
+          /tmp/wheel-test/bin/noxus plugin create --help
+          # synced modules import with only declared deps (catches missing deps)
+          /tmp/wheel-test/bin/python -c "import noxus_sdk; import noxus_sdk.documentation; import noxus_sdk.cli.main"
+          # cookiecutter plugin template ships inside the wheel
+          /tmp/wheel-test/bin/python -c "from pathlib import Path; import noxus_sdk; p = Path(noxus_sdk.__file__).parent / 'templates' / 'cookiecutter-plugin' / 'cookiecutter.json'; assert p.exists(), f'plugin template missing from wheel: {p}'"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
