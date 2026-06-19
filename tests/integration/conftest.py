@@ -2,12 +2,26 @@ import os
 import uuid
 from pathlib import Path
 
+import httpx
 import pytest
 from filelock import FileLock
 from noxus_sdk.client import Client
+from noxus_sdk.resources.admin import Workspace
 from noxus_sdk.resources.knowledge_bases import (
     KBConfigV3,
 )
+
+
+def _best_effort_delete(workspace: Workspace) -> None:
+    # The workspace delete cascade occasionally 504s server-side; a cleanup
+    # failure must not fail an otherwise-passing test. Stale sdk-* workspaces
+    # are reaped at the start of the next session by `workspace_client`.
+    try:
+        workspace.delete()
+    except httpx.HTTPError as exc:
+        print(
+            f"warning: best-effort workspace cleanup failed for {workspace.id}: {exc}"
+        )
 
 
 @pytest.fixture
@@ -30,7 +44,7 @@ def workspace_client():
             for workspace in client.admin.list_workspaces():
                 if workspace.name.startswith("sdk-"):
                     print("Deleting", workspace.name)
-                    workspace.delete()
+                    _best_effort_delete(workspace)
             fn.touch()
 
     return client
@@ -41,7 +55,7 @@ def api_key(workspace_client: Client):
     workspace = workspace_client.admin.create_workspace(f"sdk-{uuid.uuid4()}")
     api_key = workspace.add_api_key("test_key")
     yield api_key.value
-    workspace.delete()
+    _best_effort_delete(workspace)
 
 
 @pytest.fixture
