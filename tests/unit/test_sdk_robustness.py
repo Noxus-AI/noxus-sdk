@@ -9,6 +9,7 @@ from unittest.mock import create_autospec
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
 
 from noxus_sdk.client import Client
 from noxus_sdk.resources.assistants import Agent, AgentSettings
@@ -18,6 +19,7 @@ from noxus_sdk.resources.conversations import (
     ConversationTool,
     KnowledgeBaseQaTool,
     WebResearchTool,
+    _route_tool_settings,
 )
 
 
@@ -71,8 +73,7 @@ _BACKEND_EXTRA_SETTINGS_FIELDS = {
     "usage_limits_max_messages": 50,
     "usage_limits_agent_timeout": 600,
     "subagents_enabled": False,
-    "enable_gp_subagent": False,
-    "allow_dynamic_subagents": False,
+    "subagents_instructions": None,
     "tool_grant_scope": "workspace",
     # Categorized tool fields (backend-internal, SDK ignores)
     "workflows": [],
@@ -386,7 +387,8 @@ class TestConversationSettingsEdgeCases:
 
 class TestToolEdgeCases:
     def test_kb_qa_missing_kb_id(self):
-        """kb_id is required on KnowledgeBaseQaTool — should fail."""
+        """kb_id is required on KnowledgeBaseQaTool — a known type with a bad
+        payload is bad data and must fail (not degrade to the base tool)."""
         with pytest.raises(Exception):
             ConversationSettings(
                 model=["gpt-4o"],
@@ -402,6 +404,41 @@ class TestToolEdgeCases:
                 temperature=0.7,
                 tools=[{"type": "workflow", "enabled": True}],
             )
+
+    def test_route_tool_settings_three_branches(self):
+        """Pin the contract of ``_route_tool_settings`` — the routing that makes
+        the open tool union both fail-loud and forward-compatible. Three branches
+        must stay distinct:
+
+        1. a modelled ``type`` with a valid payload → its typed class;
+        2. a modelled ``type`` with a bad payload → raises (bad data, NOT a
+           silent degrade to the base tool);
+        3. a ``type`` this SDK doesn't model → the base ``ConversationTool``,
+           preserving every extra field (forward-compat, lossless);
+        and a missing ``type`` is bad data → raises.
+        """
+        # 1. known + valid → typed class
+        valid = _route_tool_settings({"type": "kb_qa", "kb_id": "kb-1"})
+        assert isinstance(valid, KnowledgeBaseQaTool)
+        assert valid.kb_id == "kb-1"
+
+        # 2. known + bad payload → raises (fail-loud, no degrade to base)
+        with pytest.raises(ValidationError):
+            _route_tool_settings({"type": "kb_qa"})
+
+        # missing type → bad data → raises
+        with pytest.raises(ValidationError):
+            _route_tool_settings({"enabled": True})
+
+        # 3. unmodelled type → base ConversationTool, extras preserved
+        unknown = _route_tool_settings(
+            {"type": "future_backend_tool", "server_url": "http://x", "weight": 3}
+        )
+        assert type(unknown) is ConversationTool
+        assert unknown.type == "future_backend_tool"
+        dumped = unknown.model_dump()
+        assert dumped["server_url"] == "http://x"
+        assert dumped["weight"] == 3
 
     def test_tool_with_extra_backend_fields(self):
         """All tools inherit extra='allow' from ConversationTool, so extra fields are preserved."""

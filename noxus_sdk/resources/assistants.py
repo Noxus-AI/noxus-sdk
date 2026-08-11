@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import enum
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TypeAlias
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -9,9 +10,6 @@ from noxus_sdk.resources.base import BaseResource, BaseService
 from noxus_sdk.resources.conversations import (
     ConversationSettings,
 )
-
-if TYPE_CHECKING:
-    from uuid import UUID
 
 AgentSettings: TypeAlias = ConversationSettings
 

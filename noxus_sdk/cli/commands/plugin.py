@@ -144,3 +144,20 @@ def serve(
     from noxus_sdk.plugins.serve import serve_plugin
 
     serve_plugin(Path(path), host=host, port=port, print_port=True)
+
+
+@app.command(hidden=True)
+def worker(
+    path: str = typer.Option(".", help="Plugin directory path"),
+) -> None:
+    """Run a plugin as a warm JSON-RPC worker over stdio.
+
+    This is how the platform runs a plugin: the runtime starts this command
+    inside the plugin's sandbox and speaks JSON-RPC to it. stdout carries
+    protocol frames, stderr carries logs. Not intended for interactive use.
+    """
+    import asyncio
+
+    from noxus_sdk.plugins.worker import run_worker
+
+    asyncio.run(run_worker(Path(path)))

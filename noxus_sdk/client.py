@@ -397,19 +397,24 @@ class Client(Requester):
         from noxus_sdk.resources.agentflows import AgentFlowService
         from noxus_sdk.resources.assistants import AgentService
         from noxus_sdk.resources.conversations import ConversationService
+        from noxus_sdk.resources.evaluations import EvaluationService
         from noxus_sdk.resources.files import FileService
         from noxus_sdk.resources.knowledge_bases import KnowledgeBaseService
         from noxus_sdk.resources.runs import RunService
         from noxus_sdk.resources.workflows import WorkflowService
-        from noxus_sdk.workflows import load_node_types
+        from noxus_sdk.workflows import load_node_catalog, set_node_types
 
         self.api_key = api_key
         self.base_url = os.environ.get("NOXUS_BACKEND_URL", base_url)
         self.extra_headers = extra_headers
 
         if load_nodes:
-            self.nodes = self.get_nodes()
-            load_node_types(self.nodes)
+            # Raw response bytes feed a digest-memoized decode+parse — the
+            # 16MB catalog is decoded and validated once per process, not
+            # once per Client.
+            response = self._request("GET", "/v1/nodes")
+            self.nodes, parsed = load_node_catalog(response.content)
+            set_node_types(parsed)
         else:
             self.nodes = []
 
@@ -419,6 +424,7 @@ class Client(Requester):
         self.conversations = ConversationService(self)
         self.knowledge_bases = KnowledgeBaseService(self)
         self.runs = RunService(self)
+        self.evaluations = EvaluationService(self)
         self.admin = AdminService(self, enabled=bool(not load_me))
         self.files = FileService(self)
         if load_me:

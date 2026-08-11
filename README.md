@@ -804,34 +804,19 @@ Environment variables can be used instead of flags:
 | `NOXUS_API_KEY` | Platform API key (required for stdio/sse) |
 | `NOXUS_BACKEND_URL` | Backend URL (default: `https://backend.noxus.ai`) |
 
-### Production Deployment (ASGI)
+### Production Deployment
 
-For production, use the ASGI entrypoint with uvicorn:
+In production the MCP server runs **inside the Noxus backend**: the backend
+mounts the MCP ASGI sub-app at `<backend>/mcp` (`spotflow_backend.main`), where
+the tools execute in-process against the platform. There is no standalone MCP
+deployment — point remote MCP clients at the backend's `/mcp` path.
 
-```bash
-NOXUS_BACKEND_URL=http://backend:8080 \
-  uvicorn noxus_sdk.mcp.asgi:app --host 0.0.0.0 --port 8000
-```
+Each MCP client authenticates per-request with `Authorization: Bearer <key>`
+(a Noxus API key, or a platform-minted MCP JWT). No shared secrets live in the
+deployment, and horizontal scaling works out of the box (stateless).
 
-In production mode (`stateless_http=True`), the server does **not** require a pre-configured API key. Instead, each MCP client sends their own Noxus API key as `Authorization: Bearer <key>`, which is forwarded to the backend per-request. This means:
-
-- No shared secrets in the deployment
-- Each user authenticates with their own platform API key
-- Horizontal scaling works out of the box (stateless)
-
-Endpoints:
-
-- `POST /mcp` — Streamable HTTP MCP endpoint
-- `GET /health` — Health check endpoint
-
-A lightweight Dockerfile is provided at `noxus-sdk/Dockerfile`:
-
-```bash
-docker build -t noxus-mcp -f noxus-sdk/Dockerfile .
-docker run -p 8000:8000 \
-  -e NOXUS_BACKEND_URL=http://backend:8080 \
-  noxus-mcp
-```
+The `noxus mcp serve` CLI above remains for local stdio/sse use against a
+remote backend.
 
 ### Client Configuration
 

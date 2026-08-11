@@ -29,6 +29,7 @@ def Parameter(  # noqa: N802 - Syntax sugar
     tab: Literal["Configuration", "Safety", "Human", "Model"] = "Configuration",
     accordion: str | None = None,
     optional: bool = False,
+    bindable: bool = False,
     tooltip: str | None = None,
     placeholder: Any | None = None,  # noqa: ANN401 - No way around this for now
     col_span: int | None = None,
@@ -48,6 +49,11 @@ def Parameter(  # noqa: N802 - Syntax sugar
         js_field["advanced"] = True
     if optional:
         js_field["optional"] = True
+    if bindable:
+        # V2 nodes only: marks this config field as a bindable input (accepts a
+        # literal or a `:var[...]` reference). BaseNodeV2 routes it to the
+        # manifest's `inputs`; on V1 nodes it has no effect.
+        js_field["bindable"] = True
     if tab:
         js_field["tab"] = tab
     if accordion:

@@ -38,13 +38,14 @@ dependencies = [
     "typer[all]>=0.16.0",
     "uvicorn>=0.35.0",
     "pyyaml>=6.0",
-    "gitpython>=3.1.45",
-    "pillow>=11.3.0",
+    "gitpython>=3.1.55",
+    "pillow>=12.3.0",
     "markdownify>=1.1.0",
     "async-lru>=2.0.5",
     "rapidfuzz>=3.0.0",
     "httpx-sse",
-    "aiofiles"
+    "aiofiles",
+    "tomli>=2.0.0; python_version < '3.11'"
 ]
 
 [project.urls]

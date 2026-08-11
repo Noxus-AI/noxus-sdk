@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import enum
+import hashlib
+import json
 import uuid
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any, AsyncIterator, Iterator, Sequence
 
 from pydantic import BaseModel, Field, TypeAdapter, model_validator
@@ -95,6 +98,11 @@ class ConfigDefinition(BaseModel):
     visible: bool
     optional: bool
     default: Any
+    display: dict[str, Any] = {}
+    rules: list[dict[str, Any]] = []
+    accordion: str | None = None
+    advanced: bool = False
+    tab: str | None = None
 
     def check_value(self, key: str, value: Any):
         if value is None:
@@ -126,18 +134,56 @@ class NodeDefinition(BaseModel):
     example: str | None = None
     documentation_url: str | None = None
     ai_instructions: str | None = None
+    v2_ready: bool = False
+    output_paths: list[str] = []
 
 
 NODE_TYPES: dict[str, NodeDefinition] = {}
 
+_catalog_cache: dict[str, tuple[list[dict], dict[str, NodeDefinition]]] = {}
+_CATALOG_CACHE_MAX_ENTRIES = 8
 
-def load_node_types(nodes_: list[dict]):
-    NODE_TYPES.clear()
+
+def parse_node_types(nodes_: list[dict]) -> dict[str, NodeDefinition]:
+    """Validate raw /v1/nodes payloads without touching the global registry.
+
+    Parsing the full catalog (~800 node definitions, ~16MB of JSON) costs on
+    the order of a second of CPU; callers that need the same catalog
+    repeatedly should parse once — or use load_node_catalog, which memoizes
+    by response-byte digest — and apply it with set_node_types.
+    """
     nodes: list[NodeDefinition] = TypeAdapter(list[NodeDefinition]).validate_python(
         nodes_
     )
-    for node in nodes:
-        NODE_TYPES[node.type] = node
+    return {node.type: node for node in nodes}
+
+
+def load_node_catalog(raw: bytes) -> tuple[list[dict], dict[str, NodeDefinition]]:
+    """Decode + parse a raw /v1/nodes response body, memoized by byte digest.
+
+    Hashing the bytes (~40ms for 16MB) replaces both the JSON decode
+    (~250ms) and the pydantic parse (~1s) on repeat construction of Clients
+    against the same backend.
+    """
+    digest = hashlib.sha256(raw).hexdigest()
+    cached = _catalog_cache.get(digest)
+    if cached is not None:
+        return cached
+    nodes_ = json.loads(raw)
+    entry = (nodes_, parse_node_types(nodes_))
+    if len(_catalog_cache) >= _CATALOG_CACHE_MAX_ENTRIES:
+        _catalog_cache.clear()
+    _catalog_cache[digest] = entry
+    return entry
+
+
+def set_node_types(parsed: dict[str, NodeDefinition]) -> None:
+    NODE_TYPES.clear()
+    NODE_TYPES.update(parsed)
+
+
+def load_node_types(nodes_: list[dict]):
+    set_node_types(parse_node_types(nodes_))
 
 
 class ConnectorType(str, enum.Enum):
@@ -173,6 +219,24 @@ class Edge(BaseModel):
     from_id: EdgePoint
     to_id: EdgePoint
     id: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_v2_edge(cls, values):
+        # V2 flow edges are {id, source, target, source_handle, target_handle};
+        # map them onto the V1 from_id/to_id EdgePoints so parsing a V2 workflow
+        # doesn't fail validation.
+        if isinstance(values, dict) and "from_id" not in values and "source" in values:
+            values = dict(values)
+            values["from_id"] = {
+                "node_id": values["source"],
+                "connector_name": values.get("source_handle") or "output",
+            }
+            values["to_id"] = {
+                "node_id": values["target"],
+                "connector_name": values.get("target_handle") or "input",
+            }
+        return values
 
 
 class NodeOutput(BaseModel):
@@ -314,18 +378,32 @@ class Node(BaseModel):
         node_type = NODE_TYPES.get(self.type)
         assert node_type, f"Node type {self.type} not found"
         self.config_definition = node_type.config
+        # V2 node schemas have no connectors: their IO specs carry data_type
+        # (no ``type``). Fall back to the bare connector kind so parsing a V2
+        # workflow through this V1 model doesn't raise ``KeyError('type')``.
         self.inputs = [
-            NodeInput(node_id=str(self.id), name=input["name"], type=input["type"])
+            NodeInput(
+                node_id=str(self.id),
+                name=input["name"],
+                type=input.get("type", ConnectorType.input),
+            )
             for input in node_type.inputs
         ]
         self.outputs = [
-            NodeOutput(node_id=str(self.id), name=output["name"], type=output["type"])
+            NodeOutput(
+                node_id=str(self.id),
+                name=output["name"],
+                type=output.get("type", ConnectorType.output),
+            )
             for output in node_type.outputs
         ]
         if not self.connector_config:
             self.connector_config = {
-                "inputs": node_type.inputs,
-                "outputs": node_type.outputs,
+                # Dynamic connector keys are added by input()/output(). Keep
+                # those mutations local to this node instead of leaking them
+                # into the process-wide cached node catalog.
+                "inputs": deepcopy(node_type.inputs),
+                "outputs": deepcopy(node_type.outputs),
             }
         self.name = node_type.title
         self.display = {"position": {"x": x, "y": y}}

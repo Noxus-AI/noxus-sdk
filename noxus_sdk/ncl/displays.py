@@ -46,12 +46,25 @@ class ConfigText(BaseConfigDisplay):
     class_name: str | None = None
 
 
+class ConfigPassword(BaseConfigDisplay):
+    type: Literal["password"] = "password"  # type: ignore
+    placeholder: str | None = None
+
+
 class ConfigNumber(BaseConfigDisplay):
     type: Literal["number"] = "number"  # type: ignore
 
 
 class ConfigNumberSlider(BaseConfigDisplay):
     type: Literal["number_slider"] = "number_slider"  # type: ignore
+    min: float | int = 0
+    max: float | int = 100
+    step: float | int = 1
+    hide_number: bool = True
+
+
+class ConfigNumberRangeSlider(BaseConfigDisplay):
+    type: Literal["number_range_slider"] = "number_range_slider"  # type: ignore
     min: float | int = 0
     max: float | int = 100
     step: float | int = 1
@@ -540,6 +553,7 @@ AnyConfigDisplay = Annotated[
     ConfigText
     | ConfigNumber
     | ConfigNumberSlider
+    | ConfigNumberRangeSlider
     | ConfigNumberRange
     | ConfigToggle
     | ConfigToggleButton

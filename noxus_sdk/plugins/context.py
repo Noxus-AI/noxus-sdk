@@ -27,6 +27,10 @@ class RemoteExecutionContext(BaseModel):
     plugin_config: dict = {}
     integration_credentials: dict[str, dict] = {}
     group_id: str | None = None
+    # Opaque, single-use token minted by the host for this call. File
+    # callbacks must present it; the host uses it to resolve which workspace
+    # the call belongs to. Plugin code never needs to read or set it.
+    call_token: str | None = None
     _file_helper: FileHelper | None = None
 
     def get_integration_credentials(self, integration_name: str) -> dict:

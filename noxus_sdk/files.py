@@ -85,6 +85,34 @@ class File(BaseModel):
         )
 
     @classmethod
+    async def from_bytes_internal_uri(
+        cls,
+        ctx: RemoteExecutionContext,
+        data: bytes,
+        name: Optional[str] = None,
+        content_type: str = "text/plain",
+        source_type: SourceType = SourceType.Document,
+        source_metadata: Optional[SourceMetadata | dict] = None,
+    ) -> File:
+        """Persist raw ``bytes`` to platform storage and return a :class:`File`
+        that references them by internal (``spot://``) URI.
+
+        Alias of :meth:`from_bytes` — both upload through the host ``upload_file``
+        callback, so the resulting file lives in platform storage (not the
+        sandbox) and can be handed to downstream nodes. Prefer this when you want
+        an explicit, self-documenting call at a persistence site (e.g. saving a
+        downloaded attachment); use :meth:`from_bytes` otherwise.
+        """
+        return await cls.from_bytes(
+            ctx,
+            data,
+            name=name,
+            content_type=content_type,
+            source_type=source_type,
+            source_metadata=source_metadata,
+        )
+
+    @classmethod
     def from_spot_uri(cls, uri: str, name: Optional[str] = None) -> File:
         """Retro-compatibility helper to create a File object from a spot:// URI"""
         if not uri.startswith("spot://"):
@@ -132,3 +160,23 @@ class EmptyFile(File):
 
     async def get_content(self, ctx: RemoteExecutionContext) -> bytes:
         return b" "
+
+
+async def persist_files_locally(
+    ctx: RemoteExecutionContext, files: list[File], path: str | None = None
+) -> str:
+    """Download ``files`` into a local directory and return that directory path.
+
+    Each file's bytes are fetched via the host ``get_content`` callback and
+    written under ``path`` using the file's ``name``. When ``path`` is omitted a
+    fresh directory under ``/tmp`` is created. The directory lives on the
+    plugin's own sandbox filesystem — use this when a library needs real file
+    paths on disk rather than :class:`File` references.
+    """
+    if not path:
+        path = os.path.join("/tmp", uuid.uuid4().hex)
+    os.makedirs(path, exist_ok=True)
+    for f in files:
+        with open(os.path.join(path, f.name), "wb") as fp:
+            fp.write(await f.get_content(ctx))
+    return path
