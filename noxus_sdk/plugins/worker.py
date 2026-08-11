@@ -233,7 +233,7 @@ async def run_worker(plugin_folder: Path) -> None:
     """Load the plugin and serve JSON-RPC over stdio until EOF."""
     # Keep stdout pristine for protocol frames; logs go to stderr only.
     logger.remove()
-    logger.add(sys.stderr, level="INFO")
+    logger.add(sys.stderr, level="INFO", diagnose=False)
 
     dispatcher = load_dispatcher(plugin_folder)
     reader, writer = await _stdio_lines()
