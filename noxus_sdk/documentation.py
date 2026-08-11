@@ -10,8 +10,38 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TypedDict
 
 from rapidfuzz import fuzz
+
+
+class DocPageSummary(TypedDict):
+    path: str
+    title: str
+    description: str
+
+
+class DocSection(TypedDict):
+    section: str
+    page_count: int
+    pages: list[DocPageSummary]
+
+
+class DocPage(TypedDict):
+    path: str
+    title: str
+    description: str
+    section: str
+    content: str
+
+
+class DocSearchResult(TypedDict):
+    path: str
+    title: str
+    description: str
+    section: str
+    score: float
+
 
 # Directories that are not documentation content
 _SKIP_DIRS = {"images", "logo", "videos", "snippets", "openapi"}
@@ -144,25 +174,25 @@ def _search_blob(entry: DocEntry) -> str:
 # ── Public API ──────────────────────────────────────────────────────
 
 
-def list_sections() -> list[dict[str, str | int | list[dict[str, str]]]]:
+def list_sections() -> list[DocSection]:
     """List all documentation sections with their pages."""
     index = load_index()
-    sections: dict[str, list[dict[str, str]]] = {}
+    sections: dict[str, list[DocPageSummary]] = {}
     for entry in index.entries:
         sections.setdefault(entry.section, []).append(
-            {
-                "path": entry.path,
-                "title": entry.title,
-                "description": entry.description,
-            }
+            DocPageSummary(
+                path=entry.path,
+                title=entry.title,
+                description=entry.description,
+            )
         )
     return [
-        {"section": section, "page_count": len(pages), "pages": pages}
+        DocSection(section=section, page_count=len(pages), pages=pages)
         for section, pages in sorted(sections.items())
     ]
 
 
-def read_page(path: str) -> dict[str, str]:
+def read_page(path: str) -> DocPage:
     """Read the full content of a documentation page by path."""
     index = load_index()
     path = path.strip("/").removesuffix(".mdx")
@@ -171,16 +201,16 @@ def read_page(path: str) -> dict[str, str]:
         available = [e.path for e in index.entries if path.split("/")[-1] in e.path]
         hint = f" Similar: {available[:5]}" if available else ""
         raise KeyError(f"Documentation page '{path}' not found.{hint}")
-    return {
-        "path": entry.path,
-        "title": entry.title,
-        "description": entry.description,
-        "section": entry.section,
-        "content": entry.content,
-    }
+    return DocPage(
+        path=entry.path,
+        title=entry.title,
+        description=entry.description,
+        section=entry.section,
+        content=entry.content,
+    )
 
 
-def search(query: str, limit: int = 10) -> list[dict[str, str | float]]:
+def search(query: str, limit: int = 10) -> list[DocSearchResult]:
     """Search documentation pages by keyword or topic."""
     index = load_index()
     q = query.lower()
@@ -191,12 +221,12 @@ def search(query: str, limit: int = 10) -> list[dict[str, str | float]]:
             scored.append((s, entry))
     scored.sort(key=lambda x: x[0], reverse=True)
     return [
-        {
-            "path": entry.path,
-            "title": entry.title,
-            "description": entry.description,
-            "section": entry.section,
-            "score": round(score, 1),
-        }
+        DocSearchResult(
+            path=entry.path,
+            title=entry.title,
+            description=entry.description,
+            section=entry.section,
+            score=round(score, 1),
+        )
         for score, entry in scored[:limit]
     ]

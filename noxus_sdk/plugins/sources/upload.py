@@ -10,7 +10,7 @@ import tarfile
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import Literal
+from typing import Awaitable, Callable, Literal
 
 import aiofiles
 import httpx
@@ -19,6 +19,21 @@ from pydantic import BaseModel, Field
 
 from noxus_sdk.plugins.interfaces import PluginSource
 from noxus_sdk.plugins.manifest import PluginManifest
+
+FileFetcher = Callable[[str], Awaitable[bytes]]
+
+_platform_file_fetcher: FileFetcher | None = None
+
+
+def set_platform_file_fetcher(fetcher: FileFetcher) -> None:
+    """Install an in-process fetcher for uploaded plugin files.
+
+    When the platform itself provisions plugins it already has direct access
+    to file storage, so it registers a fetcher here and no HTTP endpoint or
+    platform key is involved. Standalone consumers leave this unset and the
+    legacy HTTP download is used."""
+    global _platform_file_fetcher
+    _platform_file_fetcher = fetcher
 
 
 def _is_safe_path(base_path: Path, member_path: str) -> bool:
@@ -96,42 +111,28 @@ class UploadPluginSource(PluginSource, BaseModel):
                 temp_file_path.unlink()
 
     async def _download_file_from_platform(self) -> Path:
-        """Download file from platform API using file ID"""
-        platform_url = os.getenv("NOXUS_PLATFORM_URL", "http://localhost:8000")
-        api_key = os.getenv("PLUGIN_SERVER_PLATFORM_KEY", None)
+        """Fetch the uploaded plugin archive from platform storage.
 
-        if not api_key:
-            raise ValueError(
-                "PLUGIN_SERVER_PLATFORM_KEY environment variable is required"
+        Only the platform ever installs an uploaded plugin, and it registers an
+        in-process fetcher (see :func:`set_platform_file_fetcher`). There is no
+        HTTP fallback: the endpoint it used to call lived on the plugin-server,
+        which no longer exists.
+        """
+        if _platform_file_fetcher is None:
+            raise RuntimeError(
+                "No platform file fetcher registered — an uploaded plugin can "
+                "only be installed from within the platform."
             )
 
-        url = f"{platform_url}/plugin-server/files/{self.file_id}"
-        headers = {"X-API-Key": api_key}
-
-        logger.info(f"Downloading file {self.file_id} from platform: {url}")
-
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, headers=headers, timeout=60.0)
-
-            if response.status_code == 404:
-                raise FileNotFoundError(
-                    f"File with ID {self.file_id} not found on platform",
-                )
-            if response.status_code == 401:
-                raise ValueError("Invalid API key for platform access")
-
-            response.raise_for_status()
-
-            # Create temporary file
-            temp_file = tempfile.NamedTemporaryFile(
-                suffix=f"_{self.filename}",
-                delete=False,
-            )
-            temp_file.write(response.content)
-            temp_file.close()
-
-            logger.info(f"Downloaded file to temporary location: {temp_file.name}")
-            return Path(temp_file.name)
+        content = await _platform_file_fetcher(self.file_id)
+        temp_file = tempfile.NamedTemporaryFile(
+            suffix=f"_{self.filename}",
+            delete=False,
+        )
+        temp_file.write(content)
+        temp_file.close()
+        logger.info(f"Fetched uploaded plugin to {temp_file.name}")
+        return Path(temp_file.name)
 
     async def _extract_archive(
         self,

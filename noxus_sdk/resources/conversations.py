@@ -10,11 +10,11 @@ from httpx_sse import ServerSentEvent  # noqa: TC002 — runtime-imported for cl
 from pydantic import (
     AliasChoices,
     BaseModel,
+    BeforeValidator,
     ConfigDict,
-    Discriminator,
     Field,
     JsonValue,
-    Tag,
+    TypeAdapter,
     ValidationError,
     field_validator,
     model_validator,
@@ -217,68 +217,105 @@ class CreateFilesTool(ConversationTool):
     show_inline: bool = False
 
 
-_TOOL_TYPE_MAP: dict[str, type[ConversationTool]] = {
-    "web_research": WebResearchTool,
-    "noxus_qa": NoxusQaTool,
-    "kb_selector": KnowledgeBaseSelectorTool,
-    "kb_qa": KnowledgeBaseQaTool,
-    "workflow": WorkflowTool,
-    "human_in_the_loop": HumanInTheLoopTool,
-    "attach_file": AttachFileTool,
-    "memory": MemoryTool,
-    "filesystem": FileSystemTool,
-    "code_execution": CodeExecutionTool,
-    "agent_tool": AgentTool,
-    "action": ActionTool,
-    "chatflow": ChatflowTool,
-    "flow_transition": FlowTransitionTool,
-    "chatflow_extraction": ChatflowExtractionTool,
-    "chatflow_transition": ChatflowTransitionTool,
-    "sandbox": SandboxTool,
-    "schedule_tool": ScheduleTool,
-    "todos": TodosTool,
-    "subagent": SubagentTool,
-    "agent_memory": AgentMemoryTool,
-    "create_files": CreateFilesTool,
-}
+class DocxTool(ConversationTool):
+    """Tool that reads, edits, and comments on Word (.docx) files."""
+
+    model_config = ConfigDict(extra="allow")
+    type: Literal["docx"] = "docx"
 
 
-def _tool_discriminator(v: Any) -> str:
-    """Resolve tool type, falling back to 'unknown' for new backend tool types."""
-    if isinstance(v, dict):
-        tool_type = v.get("type", "")
-    elif isinstance(v, ConversationTool):
-        tool_type = v.type
-    else:
-        tool_type = ""
-    return tool_type if tool_type in _TOOL_TYPE_MAP else "_fallback"
+class DocumentationTool(ConversationTool):
+    """Tool that searches and reads Noxus platform documentation."""
+
+    model_config = ConfigDict(extra="allow")
+    type: Literal["documentation"] = "documentation"
 
 
+class ExcelTool(ConversationTool):
+    """Tool that reads, analyzes, and modifies Excel spreadsheets."""
+
+    model_config = ConfigDict(extra="allow")
+    type: Literal["excel"] = "excel"
+
+
+class FilesTool(ConversationTool):
+    """Tool that attaches, generates, and works with files."""
+
+    model_config = ConfigDict(extra="allow")
+    type: Literal["files"] = "files"
+
+
+class ImageGenerationTool(ConversationTool):
+    """Tool that generates images from text prompts."""
+
+    model_config = ConfigDict(extra="allow")
+    type: Literal["image_generation"] = "image_generation"
+
+
+# Closed discriminated union of the tool types this SDK models. As a proper
+# ``type``-discriminated union its branches are mutually exclusive, so pydantic
+# renders a valid ``oneOf`` (with a discriminator mapping).
+KnownToolSettings = Annotated[
+    WebResearchTool
+    | NoxusQaTool
+    | KnowledgeBaseSelectorTool
+    | KnowledgeBaseQaTool
+    | WorkflowTool
+    | HumanInTheLoopTool
+    | AttachFileTool
+    | MemoryTool
+    | FileSystemTool
+    | CodeExecutionTool
+    | AgentTool
+    | ActionTool
+    | ChatflowTool
+    | FlowTransitionTool
+    | ChatflowExtractionTool
+    | ChatflowTransitionTool
+    | SandboxTool
+    | ScheduleTool
+    | TodosTool
+    | SubagentTool
+    | AgentMemoryTool
+    | CreateFilesTool
+    | DocxTool
+    | DocumentationTool
+    | ExcelTool
+    | FilesTool
+    | ImageGenerationTool,
+    Field(discriminator="type"),
+]
+
+_known_tool_adapter = TypeAdapter(KnownToolSettings)
+
+
+def _route_tool_settings(value: JsonValue | ConversationTool) -> ConversationTool:
+    """Validate a tool strictly by its ``type``, degrading only unknown types.
+
+    A ``type`` this SDK version models must satisfy that class (a ``kb_qa``
+    without ``kb_id`` is bad data and raises). Only a present-but-unmodelled
+    ``type`` — a tool a newer backend added — degrades to the base
+    ``ConversationTool`` and round-trips losslessly. A missing ``type`` is bad
+    data and raises.
+    """
+    if isinstance(value, ConversationTool):
+        return value
+    try:
+        return _known_tool_adapter.validate_python(value)
+    except ValidationError as exc:
+        if all(err["type"] == "union_tag_invalid" for err in exc.errors()):
+            return ConversationTool.model_validate(value)
+        raise
+
+
+# Composing the base ``ConversationTool`` as a plain union member makes pydantic
+# render the whole thing as ``anyOf`` (not a discriminated ``oneOf``), which
+# validates cleanly for strict JSON-Schema consumers such as the MCP client — no
+# schema post-processing needed. The ``BeforeValidator`` supplies the strict
+# ``type``-based routing that a plain union would otherwise lose.
 AnyToolSettings = Annotated[
-    Annotated[WebResearchTool, Tag("web_research")]
-    | Annotated[NoxusQaTool, Tag("noxus_qa")]
-    | Annotated[KnowledgeBaseSelectorTool, Tag("kb_selector")]
-    | Annotated[KnowledgeBaseQaTool, Tag("kb_qa")]
-    | Annotated[WorkflowTool, Tag("workflow")]
-    | Annotated[HumanInTheLoopTool, Tag("human_in_the_loop")]
-    | Annotated[AttachFileTool, Tag("attach_file")]
-    | Annotated[MemoryTool, Tag("memory")]
-    | Annotated[FileSystemTool, Tag("filesystem")]
-    | Annotated[CodeExecutionTool, Tag("code_execution")]
-    | Annotated[AgentTool, Tag("agent_tool")]
-    | Annotated[ActionTool, Tag("action")]
-    | Annotated[ChatflowTool, Tag("chatflow")]
-    | Annotated[FlowTransitionTool, Tag("flow_transition")]
-    | Annotated[ChatflowExtractionTool, Tag("chatflow_extraction")]
-    | Annotated[ChatflowTransitionTool, Tag("chatflow_transition")]
-    | Annotated[SandboxTool, Tag("sandbox")]
-    | Annotated[ScheduleTool, Tag("schedule_tool")]
-    | Annotated[TodosTool, Tag("todos")]
-    | Annotated[SubagentTool, Tag("subagent")]
-    | Annotated[AgentMemoryTool, Tag("agent_memory")]
-    | Annotated[CreateFilesTool, Tag("create_files")]
-    | Annotated[ConversationTool, Tag("_fallback")],
-    Discriminator(_tool_discriminator),
+    KnownToolSettings | ConversationTool,
+    BeforeValidator(_route_tool_settings),
 ]
 
 

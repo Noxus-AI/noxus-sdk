@@ -1,4 +1,5 @@
 import os
+import time
 import uuid
 from pathlib import Path
 
@@ -31,10 +32,21 @@ def anyio_backend():
 
 @pytest.fixture(scope="session")
 def workspace_client():
-    client = Client(
-        os.environ.get("NOXUS_API_KEY", ""),
-        base_url=os.environ.get("NOXUS_BASE_URL", "https://backend.noxus.ai"),
-    )
+    # When running in the same pytest session as the smoketests suite, the
+    # stack may still be booting/seeding — retry until the admin key answers.
+    deadline = time.time() + (600 if os.environ.get("CI") else 30)
+    while True:
+        try:
+            client = Client(
+                os.environ.get("NOXUS_API_KEY", ""),
+                base_url=os.environ.get("NOXUS_BASE_URL", "https://backend.noxus.ai"),
+            )
+            client.admin.list_workspaces()
+            break
+        except Exception:
+            if time.time() > deadline:
+                raise
+            time.sleep(5)
 
     fn = Path(".workspace_lock")
     with FileLock(str(fn) + ".lock") as lock:

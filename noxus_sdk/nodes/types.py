@@ -30,6 +30,9 @@ class DataType(str, Enum):
     Quote = "Quote"
     Custom = "Custom"
     Chat = "Chat"
+    number = "number"
+    bool = "bool"
+    datetime = "datetime"
 
     @staticmethod
     def map_value(val: builtins.str) -> "DataType":
@@ -43,6 +46,11 @@ class DataType(str, Enum):
             "custom": DataType.Custom,
             "quote": DataType.Quote,
             "chat": DataType.Chat,
+            "number": DataType.number,
+            "int": DataType.number,
+            "float": DataType.number,
+            "bool": DataType.bool,
+            "datetime": DataType.datetime,
         }
         return _map[val.lower()]
 

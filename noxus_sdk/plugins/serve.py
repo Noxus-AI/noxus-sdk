@@ -1,6 +1,4 @@
 from __future__ import annotations
-import os
-import inspect
 import socket
 from typing import TYPE_CHECKING, Callable, cast
 
@@ -15,6 +13,7 @@ from noxus_sdk.plugins.context import (
     FileHelper,
     RemoteExecutionContext,  # noqa: TCH001 - For some reason ruff is not detecting the type hinting on responses, this cant be in the type check block
 )
+from noxus_sdk.plugins.dispatch import ComponentNotFoundError, PluginDispatcher
 from noxus_sdk.plugins.exceptions import PluginValidationError
 from noxus_sdk.plugins.manifest import (
     PluginManifest,  # noqa: TCH001 - For some reason ruff is not detecting the type hinting on responses, this cant be in the type check block
@@ -29,19 +28,23 @@ if TYPE_CHECKING:
     from noxus_sdk.files import File, SourceType, SourceMetadata
 
 
-class PluginFileHelper(FileHelper):
-    def __init__(self, plugin_server_url: str):
-        self.plugin_server_url = plugin_server_url.rstrip("/")
+class UnavailableFileHelper(FileHelper):
+    """File operations aren't available under ``noxus plugin serve``.
+
+    Serving a plugin over HTTP is a local authoring aid. Platform file access
+    used to be proxied by the plugin-server, which no longer exists — on the
+    platform, plugins run as sandboxed workers and their file callbacks are
+    serviced over the worker channel (see ``noxus_sdk.plugins.worker``).
+    """
+
+    _MESSAGE = (
+        "File operations are not available when serving a plugin locally. "
+        "Nodes that read or write platform files must be run by the platform, "
+        "which hosts the plugin as a sandboxed worker."
+    )
 
     async def get_content(self, file: File) -> bytes:
-        import httpx
-
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{self.plugin_server_url}/files/{file.id}", timeout=60.0
-            )
-            response.raise_for_status()
-            return response.content
+        raise RuntimeError(self._MESSAGE)
 
     async def upload_file(
         self,
@@ -52,32 +55,7 @@ class PluginFileHelper(FileHelper):
         source_metadata: SourceMetadata | dict | None = None,
         group_id: str | None = None,
     ) -> dict:
-        import base64
-
-        import httpx
-
-        async with httpx.AsyncClient() as client:
-            # Ensure source_type is a string value, not the Enum member representation
-            source_type_val = source_type
-            if hasattr(source_type, "value"):
-                source_type_val = source_type.value
-            elif not isinstance(source_type, str):
-                source_type_val = str(source_type)
-
-            logger.info(f"Uploading file {file_name} for group {group_id or 'unknown'}")
-            payload = {
-                "filename": file_name,
-                "content_type": content_type,
-                "content_base64": base64.b64encode(content).decode("utf-8"),
-                "group_id": group_id or "00000000-0000-0000-0000-000000000000",
-                "source_type": source_type_val,
-                "source_metadata": source_metadata,
-            }
-            response = await client.post(
-                f"{self.plugin_server_url}/files/upload", json=payload, timeout=60.0
-            )
-            response.raise_for_status()
-            return response.json()
+        raise RuntimeError(self._MESSAGE)
 
 
 # Exception handler configuration: (status_code, error_message, detail_extractor)
@@ -128,22 +106,16 @@ def generate_fastapi_app(plugin_class: type[BasePlugin], plugin_name: str) -> Fa
 
     logger.debug(f"Generating FastAPI app for plugin {plugin_name}")
 
-    # Get components from the plugin
-    plugin_instance = plugin_class()
-    available_nodes = plugin_instance.nodes()
-    available_integrations = plugin_instance.integrations()
+    # Load the plugin once; all handlers below delegate to this dispatcher so
+    # the HTTP and stdio (sandbox worker) transports share identical logic.
+    dispatcher = PluginDispatcher(plugin_class, plugin_name)
 
     logger.debug(
-        f"Loaded nodes from plugin class: {plugin_class.__name__}. Available nodes: {available_nodes}",
+        f"Loaded nodes from plugin class: {plugin_class.__name__}. Available nodes: {dispatcher.available_nodes}",
     )
     logger.debug(
-        f"Loaded integrations from plugin class: {plugin_class.__name__}. Available integrations: {available_integrations}",
+        f"Loaded integrations from plugin class: {plugin_class.__name__}. Available integrations: {dispatcher.available_integrations}",
     )
-
-    node_map = {node.node_name: node for node in available_nodes}
-    integration_map = {
-        integration.type: integration for integration in available_integrations
-    }
 
     # Generate FastAPI app
     app = FastAPI(
@@ -160,11 +132,11 @@ def generate_fastapi_app(plugin_class: type[BasePlugin], plugin_name: str) -> Fa
 
     @app.get("/health")
     async def health_check() -> dict:
-        """Health check endpoint for plugin server"""
+        """Health check endpoint for the locally served plugin"""
         return {
             "status": "healthy",
             "plugin": plugin_name,
-            "service": "noxus-plugin-server",
+            "service": "noxus-plugin",
         }
 
     # =============================================================================
@@ -175,27 +147,15 @@ def generate_fastapi_app(plugin_class: type[BasePlugin], plugin_name: str) -> Fa
     async def validate_config(config: dict) -> ValidationResult:
         """Validate plugin configuration"""
         logger.debug("Validating plugin configuration")
-
-        plugin_config_class = plugin_instance.get_config_class()
-
-        try:
-            plugin_config = plugin_config_class(**config)
-            result = plugin_config.validate_config()
-            logger.debug(f"Configuration validation result: {result.valid}")
-        except ValidationError as e:
-            logger.error(f"Configuration validation failed: {e}")
-            return ValidationResult(valid=False, errors=[f"Validation error: {e!s}"])
-        except Exception as e:  # noqa: BLE001 - If the plugin validation code fails, we want to return a validation result with the error. We dont control the code so need to catch all exceptions.
-            logger.error(f"Unexpected error during configuration validation: {e}")
-            return ValidationResult(valid=False, errors=[f"Unexpected error: {e!s}"])
-
+        result = dispatcher.validate_config(config)
+        logger.debug(f"Configuration validation result: {result.valid}")
         return result
 
     @app.get("/manifest")
     def get_manifest() -> PluginManifest:
         """Get plugin manifest"""
         logger.debug("Getting plugin manifest")
-        return plugin_class.get_manifest()
+        return dispatcher.manifest()
 
     # =============================================================================
     # NODE ENDPOINTS
@@ -205,17 +165,7 @@ def generate_fastapi_app(plugin_class: type[BasePlugin], plugin_name: str) -> Fa
     def list_nodes() -> dict:
         """List available nodes in this plugin"""
         logger.debug("Listing available nodes")
-        return {
-            "plugin": plugin_name,
-            "nodes": [
-                {
-                    "name": node.node_name,
-                    "class_name": node.__name__,
-                    "description": node.description,
-                }
-                for node in available_nodes
-            ],
-        }
+        return dispatcher.list_nodes()
 
     @app.post("/nodes/{node_name}/execute")
     async def execute_node(
@@ -227,79 +177,13 @@ def generate_fastapi_app(plugin_class: type[BasePlugin], plugin_name: str) -> Fa
         """Execute a specific node from the plugin with provided input data and context"""
         logger.debug(f"Preparing to execute node: {node_name}")
 
-        # Validate node exists
-        if node_name not in node_map:
-            available_node_names = list(node_map.keys())
-            error_msg = (
-                f"Node '{node_name}' not found. Available nodes: {available_node_names}"
-            )
-            logger.error(error_msg)
-            raise HTTPException(status_code=404, detail=error_msg)
+        ctx.set_file_helper(UnavailableFileHelper())
 
-        node_class = node_map[node_name]
-        logger.debug(f"Creating node instance for {node_class.__name__}")
-
-        # Create node config and instance
-        node_config = node_class.get_config_class()(**config)
-        node_instance = node_class(node_config)
-
-        # Initialize file helper
-        # We assume the plugin server is running on the same host or we can get its URL
-        # For now, let's use a default or environment variable
-        plugin_server_url = os.environ.get("PLUGIN_SERVER_URL", "http://localhost:8500")
-        ctx.set_file_helper(PluginFileHelper(plugin_server_url))
-
-        # Convert inputs to their proper types if they are Pydantic models (like File)
-        typed_inputs = {}
-        from noxus_sdk.nodes.connector import DataType
-
-        for connector in getattr(node_instance, "inputs", []):
-            conn_name = getattr(connector, "name", None)
-            if not conn_name:
-                continue
-
-            if conn_name in inputs:
-                val = inputs[conn_name]
-
-                # Get data type safely
-                conn_def = getattr(connector, "definition", None)
-                data_type = getattr(conn_def, "data_type", None) if conn_def else None
-                data_type_str = str(data_type).split(".")[-1] if data_type else ""
-
-                if data_type_str == "File" or data_type == DataType.File:
-                    from noxus_sdk.files import File
-
-                    if isinstance(val, dict):
-                        typed_inputs[conn_name] = File(**val)
-                    elif isinstance(val, list):
-                        typed_inputs[conn_name] = [
-                            File(**v) if isinstance(v, dict) else v for v in val
-                        ]
-                    else:
-                        typed_inputs[conn_name] = val
-                else:
-                    typed_inputs[conn_name] = val
-
-        # Add any inputs that weren't in the connector list
-        for key, value in inputs.items():
-            if key not in typed_inputs:
-                typed_inputs[key] = value
-
-        # Execute node
-        logger.debug(f"Executing node {node_name}")
-        is_coroutine = inspect.iscoroutinefunction(node_instance.call)
-
-        if is_coroutine:
-            outputs = await node_instance.call(ctx, **typed_inputs)
-        else:
-            outputs = node_instance.call(ctx, **typed_inputs)
-
-        logger.debug(f"Node {node_name} executed successfully")
-
-        return ExecutionResponse(
-            success=True,
-            outputs=outputs if isinstance(outputs, dict) else {"output": outputs},
-        )
+        try:
+            return await dispatcher.execute_node(node_name, ctx, inputs, config)
+        except ComponentNotFoundError as e:
+            logger.error(str(e))
+            raise HTTPException(status_code=404, detail=str(e)) from e
 
     @app.post("/nodes/{node_name}/config")
     async def get_node_config(
@@ -311,17 +195,13 @@ def generate_fastapi_app(plugin_class: type[BasePlugin], plugin_name: str) -> Fa
     ) -> ConfigResponse:
         """Get node configuration"""
         logger.debug(f"Getting configuration for node: {node_name}")
-
-        if node_name not in node_map:
-            available_node_names = list(node_map.keys())
-            error_msg = (
-                f"Node '{node_name}' not found. Available nodes: {available_node_names}"
+        try:
+            result = await dispatcher.node_config(
+                node_name, ctx, config, skip_cache=skip_cache
             )
-            logger.error(error_msg)
-            raise HTTPException(status_code=404, detail=error_msg)
-
-        node_class = node_map[node_name]
-        result = await node_class.get_config(ctx, config, skip_cache=skip_cache)
+        except ComponentNotFoundError as e:
+            logger.error(str(e))
+            raise HTTPException(status_code=404, detail=str(e)) from e
         logger.debug(f"Successfully retrieved configuration for node: {node_name}")
         return result
 
@@ -336,15 +216,11 @@ def generate_fastapi_app(plugin_class: type[BasePlugin], plugin_name: str) -> Fa
     ) -> dict:
         """Get integration configuration"""
         logger.info(f"Getting configuration for integration: {integration_name}")
-
-        if integration_name not in integration_map:
-            available_integrations = list(integration_map.keys())
-            error_msg = f"Integration '{integration_name}' not found. Available integrations: {available_integrations}"
-            logger.error(error_msg)
-            raise HTTPException(status_code=404, detail=error_msg)
-
-        integration_class = integration_map[integration_name]
-        result = integration_class.get_config()
+        try:
+            result = await dispatcher.integration_config(integration_name)
+        except ComponentNotFoundError as e:
+            logger.error(str(e))
+            raise HTTPException(status_code=404, detail=str(e)) from e
         logger.info(
             f"Successfully retrieved configuration for integration: {integration_name}",
         )
@@ -357,15 +233,11 @@ def generate_fastapi_app(plugin_class: type[BasePlugin], plugin_name: str) -> Fa
     ) -> bool:
         """Check if integration is ready"""
         logger.info(f"Checking readiness for integration: {integration_name}")
-
-        if integration_name not in integration_map:
-            available_integrations = list(integration_map.keys())
-            error_msg = f"Integration '{integration_name}' not found. Available integrations: {available_integrations}"
-            logger.error(error_msg)
-            raise HTTPException(status_code=404, detail=error_msg)
-
-        integration_class = integration_map[integration_name]
-        result = await integration_class.is_ready(creds)
+        try:
+            result = await dispatcher.integration_ready(integration_name, creds)
+        except ComponentNotFoundError as e:
+            logger.error(str(e))
+            raise HTTPException(status_code=404, detail=str(e)) from e
         logger.info(
             f"Successfully checked readiness for integration: {integration_name} (Ready: {result})",
         )
@@ -416,9 +288,11 @@ def serve_plugin(
     actual_port = server_socket.getsockname()[1]
 
     if print_port:
-        # Print port information for parent process to read
-        # The Plugin server will parse stdout and find the port, this has to be in this exact format
-        print(f"PLUGIN_PORT:{actual_port}", flush=True)  # noqa: T201 - required for plugin server to read the port
+        # Historically the plugin-server's UVProcessEngine parsed this line to
+        # discover the port of a plugin it had spawned. That service is gone and
+        # nothing in the codebase parses it any more; it survives only as a hint
+        # for local tooling that wants the bound port (e.g. when port=0).
+        print(f"PLUGIN_PORT:{actual_port}", flush=True)  # noqa: T201 - deliberate stdout contract for local tooling
 
     config = Config(
         fastapi_app,

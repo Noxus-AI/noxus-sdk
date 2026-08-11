@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Generic, TypeVar, get_args
+from types import NoneType, UnionType
+from typing import TYPE_CHECKING, Any, Generic, TypeVar, Union, get_args, get_origin
 
 from pydantic import BaseModel
 
@@ -100,31 +101,44 @@ class BaseNode(Generic[ConfigType]):
         return cls.config_class
 
     @classmethod
+    def _definition_inputs(cls) -> list[NodeInput]:
+        """The manifest input list. V1 nodes derive it from their connectors;
+        V2 nodes override this to build it from their connector-free specs."""
+        return [
+            NodeInput(
+                name=connector.name,
+                label=connector.label,
+                definition=connector.definition.__dict__,
+                optional=connector.optional,
+            )
+            for connector in cls.inputs
+        ]
+
+    @classmethod
+    def _definition_outputs(cls) -> list[NodeOutput]:
+        return [
+            NodeOutput(
+                name=connector.name,
+                label=connector.label,
+                definition=connector.definition.__dict__,
+                optional=connector.optional,
+            )
+            for connector in cls.outputs
+        ]
+
+    @classmethod
+    def _definition_config(cls) -> dict:
+        """The manifest config dict. V1 serializes the whole config class; V2
+        overrides this to drop the bindable fields it routes to ``inputs``."""
+        return cls.get_config_class().serialize()
+
+    @classmethod
     def get_definition(cls) -> NodeDefinition:
         """Convert node class to NodeDefinition for plugin manifest"""
 
-        # Convert connectors to inputs/outputs
-        inputs = []
-        for connector in cls.inputs:
-            inputs.append(
-                NodeInput(
-                    name=connector.name,
-                    label=connector.label,
-                    definition=connector.definition.__dict__,
-                    optional=connector.optional,
-                ),
-            )
-
-        outputs = []
-        for connector in cls.outputs:
-            outputs.append(
-                NodeOutput(
-                    name=connector.name,
-                    label=connector.label,
-                    definition=connector.definition.__dict__,
-                    optional=connector.optional,
-                ),
-            )
+        inputs = cls._definition_inputs()
+        outputs = cls._definition_outputs()
+        config_dict = cls._definition_config()
 
         # Serialize details
         details = [
@@ -135,9 +149,6 @@ class BaseNode(Generic[ConfigType]):
             }
             for detail in cls.details
         ]
-
-        config = cls.get_config_class()
-        config_dict = config.serialize()
 
         return NodeDefinition(
             inputs=inputs,
@@ -167,3 +178,143 @@ class BaseNode(Generic[ConfigType]):
         **kwargs,
     ) -> dict[str, Any]:
         raise NotImplementedError
+
+
+_PY_TO_DATA_TYPE = {
+    "str": "str",
+    "int": "number",
+    "float": "number",
+    "bool": "bool",
+    "dict": "dict",
+    "list": "list",
+    "datetime": "datetime",
+    "File": "File",
+    "Image": "Image",
+    "Audio": "Audio",
+    "Chat": "Chat",
+}
+
+
+def _annotation_to_type(annotation: Any) -> tuple[str, bool]:
+    """Map a Python annotation to a ``(data_type, is_list)`` pair. ``list[X]``
+    becomes the element type flagged as a list; ``Optional[X]`` unwraps to X."""
+    origin = get_origin(annotation)
+    if origin is list:
+        args = get_args(annotation)
+        inner, _ = _annotation_to_type(args[0]) if args else ("str", False)
+        return inner, True
+    if origin is Union or origin is UnionType:
+        for arg in get_args(annotation):
+            if arg is not NoneType:
+                return _annotation_to_type(arg)
+        return "str", False
+    name = getattr(annotation, "__name__", str(annotation))
+    return _PY_TO_DATA_TYPE.get(name, name), False
+
+
+class NodeOutputs(BaseModel):
+    """Output schema for a V2 plugin node: **one class declaring every output**
+    as a field. The field's annotation gives the output type (``list[X]`` → a
+    list output); ``call`` returns a dict keyed by these field names.
+
+        class MyOutputs(NodeOutputs):
+            text: str
+            tags: list[str]
+    """
+
+    @classmethod
+    def to_outputs(cls) -> list[NodeOutput]:
+        outputs: list[NodeOutput] = []
+        for name, field in cls.model_fields.items():
+            data_type, is_list = _annotation_to_type(field.annotation)
+            outputs.append(
+                NodeOutput(
+                    name=name,
+                    label=name,
+                    definition={"data_type": data_type, "is_list": is_list},
+                    optional=False,
+                )
+            )
+        return outputs
+
+
+OutputsType = TypeVar("OutputsType", bound=NodeOutputs)
+
+
+class BaseNodeV2(BaseNode[ConfigType], Generic[ConfigType, OutputsType]):
+    """Base for a **V2** plugin node — modelled on the platform's native V2
+    nodes, which have **no connectors**. A V2 node is two schemas:
+
+    - a **config schema** (its ``ConfigType``) whose fields are the node's
+      settings; a field marked ``Parameter(bindable=True)`` is a bindable
+      **input** — in the editor it takes a literal or a ``:var[...]`` reference
+      to an upstream output;
+    - an **output schema** (``NodeOutputs`` subclass) that declares every output
+      field in one place.
+
+    ``BaseNodeV2[MyConfig, MyOutputs]``. Every config value (bindable inputs
+    included) arrives on ``self.config``; ``call(ctx)`` returns a dict keyed by
+    the output field names.
+
+    On the wire the bindable fields are split into the manifest's ``inputs`` and
+    the rest into ``config`` — so a plugin can ship V1 and V2 nodes side by side
+    and each surfaces in the matching editor's picker.
+    """
+
+    parent_class = True
+
+    # V2 has no connectors; inputs come from bindable config fields, outputs
+    # from the output schema.
+    inputs: list = []  # type: ignore[assignment]
+    outputs: list = []  # type: ignore[assignment]
+    outputs_class: type[NodeOutputs] = NodeOutputs
+
+    def __init_subclass__(cls) -> None:
+        super().__init_subclass__()
+        if cls.__dict__.get("parent_class"):
+            return
+        args = get_args(cls.__orig_bases__[0])  # type: ignore
+        if len(args) >= 2 and isinstance(args[1], type):
+            cls.outputs_class = args[1]
+
+    @classmethod
+    def _bindable_fields(cls) -> dict[str, Any]:
+        """Config fields the author marked ``bindable=True`` — the node's
+        inputs, keyed by field name."""
+        fields = {}
+        for name, field in cls.get_config_class().model_fields.items():
+            if (field.json_schema_extra or {}).get("bindable"):
+                fields[name] = field
+        return fields
+
+    @classmethod
+    def _definition_inputs(cls) -> list[NodeInput]:
+        serialized = cls.get_config_class().serialize()
+        inputs: list[NodeInput] = []
+        for name, field in cls._bindable_fields().items():
+            data_type, is_list = _annotation_to_type(field.annotation)
+            entry = serialized.get(name, {})
+            label = (entry.get("display") or {}).get("label") or name
+            inputs.append(
+                NodeInput(
+                    name=name,
+                    label=label,
+                    definition={"data_type": data_type, "is_list": is_list},
+                    optional=bool(entry.get("optional", False)),
+                )
+            )
+        return inputs
+
+    @classmethod
+    def _definition_outputs(cls) -> list[NodeOutput]:
+        return cls.outputs_class.to_outputs()
+
+    @classmethod
+    def _definition_config(cls) -> dict:
+        # Bindable fields are routed to `inputs`; everything else is config.
+        bindable = set(cls._bindable_fields())
+        return {
+            name: field
+            for name, field in cls.get_config_class().serialize().items()
+            if name not in bindable
+        }
