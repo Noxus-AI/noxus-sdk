@@ -5,6 +5,7 @@ from pathlib import Path
 import httpx
 import pytest
 from noxus_sdk.client import Client
+from noxus_sdk.errors import NotFoundError
 from noxus_sdk.resources.knowledge_bases import (
     CreateDocument,
     KBConfigV3,
@@ -51,7 +52,7 @@ async def test_document_operations(kb: KnowledgeBase, test_file: Path):
     deleted_doc = await kb.adelete_document(doc.id)
     assert deleted_doc.id == doc.id
 
-    with pytest.raises(Exception, match="404 Not Found"):
+    with pytest.raises(NotFoundError):
         await kb.aget_document(doc.id)
 
 
@@ -98,7 +99,7 @@ async def test_kb_cleanup(client: Client):
     success = await kb.adelete()
     assert success is True
 
-    with pytest.raises(Exception, match="404 Not Found"):
+    with pytest.raises(NotFoundError):
         await kb.arefresh()
 
 

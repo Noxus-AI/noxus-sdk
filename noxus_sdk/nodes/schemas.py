@@ -53,6 +53,10 @@ class NodeDefinition(BaseModel):
     config_endpoint: str | None = None
     subflow_config: SubflowConfig | None = None
     is_valid: bool | None = None
+    # The node's built-in run budget (seconds). Plugin nodes execute through a
+    # generic host wrapper, so without this in the manifest the host would cap
+    # every plugin call at its own default regardless of the node's declaration.
+    max_timeout: float | None = None
     visible: bool = True
     is_available: bool = True
     show_to_user: bool = True

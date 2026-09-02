@@ -16,6 +16,8 @@ import contextlib
 import json
 from typing import TYPE_CHECKING, Any
 
+import pytest
+
 if TYPE_CHECKING:
     from noxus_sdk.files import File
 
@@ -384,6 +386,8 @@ def test_worker_manifest_and_list_nodes():
             manifest = await host.call("manifest")
             listing = await host.call("list_nodes")
         assert manifest["name"] == "worker-test-plugin"
+        # Plugin workers are light: one manager slot unless declared otherwise.
+        assert manifest["execution_slots"] == 1
         node_names = {n["name"] for n in listing["nodes"]}
         assert {"EchoNode", "FetchNode"} <= node_names
         assert manifest["triggers"][0]["type"] == "CounterTrigger"
@@ -528,3 +532,27 @@ def test_manifest_splits_v1_and_v2_nodes():
     manifest = _MixedPlugin.get_manifest()
     assert [n.type for n in manifest.nodes] == ["EchoNode"]
     assert [n.type for n in manifest.nodes_v2] == ["EchoV2Node"]
+
+
+def test_manifest_rejects_non_positive_execution_slots():
+    import pydantic
+
+    manifest = ExamplePlugin.get_manifest()
+    assert manifest.execution_slots == 1
+
+    for bad in (0, -1):
+        with pytest.raises(pydantic.ValidationError):
+            manifest.model_copy(update={"execution_slots": bad}).model_validate(
+                {**manifest.model_dump(), "execution_slots": bad}
+            )
+
+    class HeavyPlugin(ExamplePlugin):
+        execution_slots = 3
+
+    assert HeavyPlugin.get_manifest().execution_slots == 3
+
+    class BrokenPlugin(ExamplePlugin):
+        execution_slots = 0
+
+    with pytest.raises(pydantic.ValidationError):
+        BrokenPlugin.get_manifest()

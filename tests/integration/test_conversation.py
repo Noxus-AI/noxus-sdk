@@ -4,6 +4,7 @@ from uuid import uuid4
 import httpx
 import pytest
 from noxus_sdk.client import Client
+from noxus_sdk.errors import NotFoundError
 from noxus_sdk.resources.conversations import (
     ConversationFile,
     ConversationSettings,
@@ -325,7 +326,7 @@ async def test_update_conversation(
 @pytest.mark.anyio
 async def test_create_nonexistant_with_agent(client: Client):
     agent_id = str(uuid4())  # Mock agent ID
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(NotFoundError):
         conversation = await client.conversations.acreate(
             name="Agent Conversation",
             agent_id=agent_id,
