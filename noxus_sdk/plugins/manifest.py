@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from noxus_sdk.datasources.schemas import DatasourceDefinition
 from noxus_sdk.integrations.schemas import IntegrationDefinition
@@ -36,6 +36,15 @@ class PluginManifest(BaseModel):
     execution: Literal["runtime", "docker", "remote"] = "runtime"
     image: str | None = None
     endpoint: str | None = None
+    # Sandbox budget for the plugin's warm worker, in manager slots (one slot =
+    # 1/8 CPU core + 256 MiB). Plugins are light, so one by default.
+    execution_slots: int = Field(default=1, ge=1)
+
+    # Optional shell command the platform runs inside the plugin's sandbox
+    # once at provision time, after the dependency install (e.g. installing
+    # system packages or CLI tools the nodes shell out to). Non-zero exit
+    # fails the install. Must be idempotent: re-provisioning re-runs it.
+    setup_command: str | None = None
 
     # Plugin components. V1 and V2 nodes are kept as separate entities: a V1
     # node renders/wires with edge connectors, a V2 node with bindable config

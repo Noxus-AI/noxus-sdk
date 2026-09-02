@@ -13,6 +13,15 @@ class ApiKey(BaseResource):
     name: str
     tenant_admin: bool
     value: str
+    permissions: list[str] | None = None
+
+
+class TenantUser(BaseResource):
+    id: str
+    email: str
+    display_name: str | None = None
+    tenant_admin: bool
+    is_active: bool
 
 
 class Workspace(BaseResource):
@@ -47,30 +56,12 @@ class AdminService(BaseService[Workspace]):
         self.enabled = enabled
 
     def get_me(self) -> ApiKey:
-        try:
-            response = self.client.get("/v1/admin/me")
-            return ApiKey(client=self.client, **response)
-        except Exception:  # noqa: BLE001
-            return ApiKey(
-                client=self.client,
-                id="",
-                name="",
-                tenant_admin=False,
-                value="",
-            )
+        response = self.client.get("/v1/admin/me")
+        return ApiKey(client=self.client, **response)
 
     async def aget_me(self) -> ApiKey:
-        try:
-            response = await self.client.aget("/v1/admin/me")
-            return ApiKey(client=self.client, **response)
-        except Exception:  # noqa: BLE001
-            return ApiKey(
-                client=self.client,
-                id="",
-                name="",
-                tenant_admin=False,
-                value="",
-            )
+        response = await self.client.aget("/v1/admin/me")
+        return ApiKey(client=self.client, **response)
 
     async def alist_workspaces(self) -> list[Workspace]:
         if not self.enabled:
@@ -117,3 +108,98 @@ class AdminService(BaseService[Workspace]):
             {"name": name, "description": description},
         )
         return Workspace(client=self.client, **response)
+
+    # ── system (tenant-scoped) API keys ─────────────────────────────────
+    # Minted in the tenant's hidden system workspace; the only keys allowed to
+    # carry tenant-wide permissions. Requires a tenant-admin key.
+    def create_system_key(
+        self,
+        name: str,
+        *,
+        permissions: list[str] | None = None,
+        tenant_admin: bool = False,
+    ) -> ApiKey:
+        body = {
+            "name": name,
+            "permissions": permissions or [],
+            "tenant_admin": tenant_admin,
+        }
+        return ApiKey(
+            client=self.client, **self.client.post("/v1/admin/system-keys", body)
+        )
+
+    async def acreate_system_key(
+        self,
+        name: str,
+        *,
+        permissions: list[str] | None = None,
+        tenant_admin: bool = False,
+    ) -> ApiKey:
+        body = {
+            "name": name,
+            "permissions": permissions or [],
+            "tenant_admin": tenant_admin,
+        }
+        response = await self.client.apost("/v1/admin/system-keys", body)
+        return ApiKey(client=self.client, **response)
+
+    def list_system_keys(self) -> list[ApiKey]:
+        return [
+            ApiKey(client=self.client, **k)
+            for k in self.client.get("/v1/admin/system-keys")
+        ]
+
+    async def alist_system_keys(self) -> list[ApiKey]:
+        response = await self.client.aget("/v1/admin/system-keys")
+        return [ApiKey(client=self.client, **k) for k in response]
+
+    def delete_system_key(self, key_id: str) -> bool:
+        return self.client.delete(f"/v1/admin/system-keys/{key_id}")["success"]
+
+    async def adelete_system_key(self, key_id: str) -> bool:
+        response = await self.client.adelete(f"/v1/admin/system-keys/{key_id}")
+        return response["success"]
+
+    # ── tenant users (read; requires a system key with users:read) ──────
+    def list_users(self) -> list[TenantUser]:
+        return [
+            TenantUser(client=self.client, **u)
+            for u in self.client.get("/v1/admin/users")
+        ]
+
+    async def alist_users(self) -> list[TenantUser]:
+        response = await self.client.aget("/v1/admin/users")
+        return [TenantUser(client=self.client, **u) for u in response]
+
+    # ── tenant roles (requires a system key with org:admin) ─────────────
+    def list_roles(self) -> list[dict]:
+        return self.client.get("/v1/admin/roles")
+
+    async def alist_roles(self) -> list[dict]:
+        return await self.client.aget("/v1/admin/roles")
+
+    def create_role(
+        self,
+        name: str,
+        permissions: dict[str, bool],
+        *,
+        description: str | None = None,
+    ) -> dict:
+        body = {"name": name, "permissions": permissions, "description": description}
+        return self.client.post("/v1/admin/roles", body)
+
+    async def acreate_role(
+        self,
+        name: str,
+        permissions: dict[str, bool],
+        *,
+        description: str | None = None,
+    ) -> dict:
+        body = {"name": name, "permissions": permissions, "description": description}
+        return await self.client.apost("/v1/admin/roles", body)
+
+    def delete_role(self, role_id: str) -> dict:
+        return self.client.delete(f"/v1/admin/roles/{role_id}")
+
+    async def adelete_role(self, role_id: str) -> dict:
+        return await self.client.adelete(f"/v1/admin/roles/{role_id}")

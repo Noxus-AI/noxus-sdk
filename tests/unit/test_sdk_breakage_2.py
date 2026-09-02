@@ -74,19 +74,19 @@ class TestAgentFlowArunBug:
 
 class TestKBListDocumentsInconsistency:
     def test_kb_instance_uses_items_key(self):
-        """KnowledgeBase.list_documents accesses response['items'] — correct."""
+        """KB document paging accesses response['items'] — correct."""
         import inspect
 
-        source = inspect.getsource(KnowledgeBase.list_documents)
-        assert '["items"]' in source, "KB instance method accesses response['items']"
+        source = inspect.getsource(KnowledgeBase._documents_page)
+        assert '["items"]' in source, "KB paging helper accesses response['items']"
 
     def test_kb_service_uses_items_key(self):
-        """KnowledgeBaseService.list_documents must also access response['items']."""
+        """KnowledgeBaseService document paging must also access response['items']."""
         from noxus_sdk.resources.knowledge_bases import KnowledgeBaseService
         import inspect
 
-        source = inspect.getsource(KnowledgeBaseService.list_documents)
-        assert '["items"]' in source, "Service method should access response['items']"
+        source = inspect.getsource(KnowledgeBaseService._documents_page)
+        assert '["items"]' in source, "Service paging helper accesses response['items']"
 
 
 # ════════════════════════════════════════════════════════════════════

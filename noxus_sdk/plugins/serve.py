@@ -10,6 +10,7 @@ from uvicorn import Config, Server
 
 from noxus_sdk.nodes.schemas import ConfigResponse, ExecutionResponse
 from noxus_sdk.plugins.context import (
+    CredentialsHelper,
     FileHelper,
     RemoteExecutionContext,  # noqa: TCH001 - For some reason ruff is not detecting the type hinting on responses, this cant be in the type check block
 )
@@ -56,6 +57,19 @@ class UnavailableFileHelper(FileHelper):
         group_id: str | None = None,
     ) -> dict:
         raise RuntimeError(self._MESSAGE)
+
+
+class LocalCredentialsHelper(CredentialsHelper):
+    async def update_integration_credentials(
+        self,
+        integration_name: str,
+        payload: dict,
+        credential_id: str | None = None,
+    ) -> None:
+        logger.info(
+            f"[serve] update_integration_credentials({integration_name}) ignored "
+            "locally — the platform stores credentials when hosting the plugin"
+        )
 
 
 # Exception handler configuration: (status_code, error_message, detail_extractor)
@@ -178,6 +192,7 @@ def generate_fastapi_app(plugin_class: type[BasePlugin], plugin_name: str) -> Fa
         logger.debug(f"Preparing to execute node: {node_name}")
 
         ctx.set_file_helper(UnavailableFileHelper())
+        ctx.set_credentials_helper(LocalCredentialsHelper())
 
         try:
             return await dispatcher.execute_node(node_name, ctx, inputs, config)

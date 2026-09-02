@@ -111,3 +111,28 @@ def test_datetime_number_and_bool_are_declarable_types():
     # so a plugin could not declare a datetime/number/bool connector at all.
     values = {d.value for d in DataType}
     assert {"datetime", "number", "bool"} <= values
+
+
+def test_comma_separated_text_becomes_a_list_config_value():
+    from noxus_sdk.nodes.base import NodeConfiguration
+    from noxus_sdk.plugins.dispatch import _coerce_config_values
+
+    class Cfg(NodeConfiguration):
+        packages: list = []
+        note: str = ""
+
+    out = _coerce_config_values(Cfg, {"packages": "jq, ripgrep, ", "note": "a,b"})
+    assert out["packages"] == ["jq", "ripgrep"]
+    assert out["note"] == "a,b"
+    assert Cfg(**out).packages == ["jq", "ripgrep"]
+
+
+def test_optional_list_and_real_lists_pass_through():
+    from noxus_sdk.nodes.base import NodeConfiguration
+    from noxus_sdk.plugins.dispatch import _coerce_config_values
+
+    class Cfg(NodeConfiguration):
+        tags: list | None = None
+
+    assert _coerce_config_values(Cfg, {"tags": "a"})["tags"] == ["a"]
+    assert _coerce_config_values(Cfg, {"tags": ["x"]})["tags"] == ["x"]

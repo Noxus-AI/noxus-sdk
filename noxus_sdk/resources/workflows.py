@@ -3,6 +3,12 @@ from uuid import UUID
 from builtins import list as List  # noqa
 from pydantic import ConfigDict
 
+from noxus_sdk.resources._exports import (
+    ExportFormat,
+    ImportMode,
+    import_body,
+    import_params,
+)
 from noxus_sdk.resources.base import BaseResource, BaseService
 from noxus_sdk.workflows import WorkflowDefinition
 
@@ -164,3 +170,123 @@ class WorkflowService(BaseService[WorkflowDefinition]):
             },
         )
         return WorkflowVersion.model_validate({"client": self.client, **w})
+
+    # ── logs ───────────────────────────────────────────────────────────
+    def get_logs(self, workflow_id: str) -> dict:
+        """Execution logs for a workflow."""
+        return self.client.get(f"/v1/workflows/{workflow_id}/logs")
+
+    async def aget_logs(self, workflow_id: str) -> dict:
+        return await self.client.aget(f"/v1/workflows/{workflow_id}/logs")
+
+    def get_logs_columns(self, workflow_id: str) -> List[str]:
+        """The columns available in this workflow's logs."""
+        return self.client.get(f"/v1/workflows/{workflow_id}/logs/columns")
+
+    async def aget_logs_columns(self, workflow_id: str) -> List[str]:
+        return await self.client.aget(f"/v1/workflows/{workflow_id}/logs/columns")
+
+    # ── export / import ────────────────────────────────────────────────
+    def export_preview(self, workflow_id: str, version_id: str | None = None) -> dict:
+        """What an export would contain, without producing the bundle."""
+        params = {"version_id": version_id} if version_id else {}
+        return self.client.get(
+            f"/v1/workflows/{workflow_id}/export/preview", params=params
+        )
+
+    async def aexport_preview(
+        self, workflow_id: str, version_id: str | None = None
+    ) -> dict:
+        params = {"version_id": version_id} if version_id else {}
+        return await self.client.aget(
+            f"/v1/workflows/{workflow_id}/export/preview", params=params
+        )
+
+    def _export_params(
+        self,
+        version: ExportFormat,
+        version_id: str | None,
+        set_active_on_import: bool,
+        include_dependencies: bool,
+    ) -> dict:
+        params: dict = {
+            "version": version,
+            "set_active_on_import": set_active_on_import,
+            "include_dependencies": include_dependencies,
+        }
+        if version_id:
+            params["version_id"] = version_id
+        return params
+
+    def export(
+        self,
+        workflow_id: str,
+        *,
+        version: ExportFormat = "auto",
+        version_id: str | None = None,
+        set_active_on_import: bool = False,
+        include_dependencies: bool = True,
+    ) -> bytes:
+        """Export a workflow bundle.
+
+        ``auto`` (the default) emits the legacy base64 bundle; pass ``v4`` for
+        plaintext multi-doc YAML (.nx). ``include_dependencies`` bundles
+        referenced sub-flows / KBs / files.
+        """
+        response = self.client._request(
+            "POST",
+            f"/v1/workflows/{workflow_id}/export",
+            params=self._export_params(
+                version, version_id, set_active_on_import, include_dependencies
+            ),
+        )
+        return response.content
+
+    async def aexport(
+        self,
+        workflow_id: str,
+        *,
+        version: ExportFormat = "auto",
+        version_id: str | None = None,
+        set_active_on_import: bool = False,
+        include_dependencies: bool = True,
+    ) -> bytes:
+        response = await self.client._arequest(
+            "POST",
+            f"/v1/workflows/{workflow_id}/export",
+            params=self._export_params(
+                version, version_id, set_active_on_import, include_dependencies
+            ),
+        )
+        return response.content
+
+    def import_(
+        self,
+        definition: str | bytes,
+        *,
+        version: ExportFormat = "auto",
+        mode: ImportMode = "clone",
+        activate: bool = False,
+        dry_run: bool = False,
+    ) -> List[dict]:
+        """Import a bundle produced by ``export``; ``dry_run`` reports without writing."""
+        return self.client.post(
+            "/v1/workflows/import",
+            import_body(definition, version),
+            params=import_params(mode, activate, dry_run),
+        )
+
+    async def aimport_(
+        self,
+        definition: str | bytes,
+        *,
+        version: ExportFormat = "auto",
+        mode: ImportMode = "clone",
+        activate: bool = False,
+        dry_run: bool = False,
+    ) -> List[dict]:
+        return await self.client.apost(
+            "/v1/workflows/import",
+            import_body(definition, version),
+            params=import_params(mode, activate, dry_run),
+        )

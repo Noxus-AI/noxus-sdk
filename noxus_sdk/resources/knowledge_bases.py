@@ -1,10 +1,17 @@
 import builtins
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias
 
 import aiofiles
 from pydantic import BaseModel, ConfigDict, Field
 
+from noxus_sdk.resources._exports import (
+    ExportFormat,
+    ImportMode,
+    import_body,
+    import_params,
+)
 from noxus_sdk.resources.base import BaseResource, BaseService
 from noxus_sdk.resources.runs import Run
 
@@ -15,11 +22,35 @@ if TYPE_CHECKING:
 RunStatus = Literal["queued", "running", "failed", "completed", "stopped"]
 DocumentStatus = Literal["trained", "training", "error", "uploaded", "folder"]
 
+# Every non-folder document status, used to enumerate "all documents".
+_DOCUMENT_STATUSES: tuple[DocumentStatus, ...] = (
+    "trained",
+    "training",
+    "error",
+    "uploaded",
+)
+
+
+def _statuses_to_iter(
+    status: DocumentStatus | None, *, include_folders: bool
+) -> tuple[DocumentStatus, ...]:
+    if status is not None:
+        return (status,)
+    if include_folders:
+        return (*_DOCUMENT_STATUSES, "folder")
+    return _DOCUMENT_STATUSES
+
+
 SourceType = Literal[
     "document", "google_drive", "onedrive", "sharepoint", "website", "custom"
 ]
 
 RunID: TypeAlias = str
+
+
+def _prune(body: dict[str, Any]) -> dict[str, Any]:
+    """Drop unset fields so a PATCH only sends what the caller asked to change."""
+    return {k: v for k, v in body.items() if v is not None}
 
 
 class File(BaseModel):
@@ -394,31 +425,97 @@ class KnowledgeBase(BaseResource):
         )
         return KnowledgeBaseDocument(**response)
 
-    def list_documents(
-        self, status: DocumentStatus, page: int = 1, page_size: int = 10
+    def _documents_page(
+        self, status: DocumentStatus, page: int, page_size: int
     ) -> builtins.list[KnowledgeBaseDocument]:
-        params: dict[str, Any] = {"page": page, "page_size": page_size}
-        if status:
-            params["status"] = status
-
         response = self.client.get(
             f"/v1/knowledge-bases/{self.id}/documents/{status}",
-            params=params,
+            params={"page": page, "page_size": page_size},
         )
         return [KnowledgeBaseDocument(**doc) for doc in response["items"]]
 
-    async def alist_documents(
-        self, status: DocumentStatus, page: int = 1, page_size: int = 10
+    async def _adocuments_page(
+        self, status: DocumentStatus, page: int, page_size: int
     ) -> builtins.list[KnowledgeBaseDocument]:
-        params: dict[str, Any] = {"page": page, "page_size": page_size}
-        if status:
-            params["status"] = status
-
         response = await self.client.aget(
             f"/v1/knowledge-bases/{self.id}/documents/{status}",
-            params=params,
+            params={"page": page, "page_size": page_size},
         )
         return [KnowledgeBaseDocument(**doc) for doc in response["items"]]
+
+    def iter_documents(
+        self,
+        status: DocumentStatus | None = None,
+        *,
+        page_size: int = 100,
+        include_folders: bool = False,
+    ) -> Iterator[KnowledgeBaseDocument]:
+        """Yield every document, auto-paginating.
+
+        With ``status=None`` iterates across every document status (folders are
+        excluded unless ``include_folders`` is set).
+        """
+        for st in _statuses_to_iter(status, include_folders=include_folders):
+            page = 1
+            while True:
+                batch = self._documents_page(st, page, page_size)
+                yield from batch
+                if len(batch) < page_size:
+                    break
+                page += 1
+
+    async def aiter_documents(
+        self,
+        status: DocumentStatus | None = None,
+        *,
+        page_size: int = 100,
+        include_folders: bool = False,
+    ) -> AsyncIterator[KnowledgeBaseDocument]:
+        for st in _statuses_to_iter(status, include_folders=include_folders):
+            page = 1
+            while True:
+                batch = await self._adocuments_page(st, page, page_size)
+                for doc in batch:
+                    yield doc
+                if len(batch) < page_size:
+                    break
+                page += 1
+
+    def list_documents(
+        self,
+        status: DocumentStatus | None = None,
+        page: int = 1,
+        page_size: int = 10,
+        *,
+        include_folders: bool = False,
+    ) -> builtins.list[KnowledgeBaseDocument]:
+        """List documents.
+
+        Pass a ``status`` for a single page (legacy behaviour); pass ``None`` to
+        return every document across all statuses and pages.
+        """
+        if status is not None:
+            return self._documents_page(status, page, page_size)
+        return list(
+            self.iter_documents(page_size=page_size, include_folders=include_folders)
+        )
+
+    async def alist_documents(
+        self,
+        status: DocumentStatus | None = None,
+        page: int = 1,
+        page_size: int = 10,
+        *,
+        include_folders: bool = False,
+    ) -> builtins.list[KnowledgeBaseDocument]:
+        if status is not None:
+            return await self._adocuments_page(status, page, page_size)
+        return [
+            doc
+            async for doc in self.aiter_documents(
+                page_size=page_size, include_folders=include_folders
+            )
+        ]
 
 
 class KnowledgeBaseService(BaseService[KnowledgeBase]):
@@ -689,39 +786,111 @@ class KnowledgeBaseService(BaseService[KnowledgeBase]):
         )
         return KnowledgeBaseDocument(**response)
 
-    def list_documents(
+    def _documents_page(
         self,
         knowledge_base_id: str,
         status: DocumentStatus,
-        page: int = 1,
-        page_size: int = 10,
+        page: int,
+        page_size: int,
     ) -> builtins.list[KnowledgeBaseDocument]:
-        params: dict[str, Any] = {"page": page, "page_size": page_size}
-        if status:
-            params["status"] = status
-
         response = self.client.get(
             f"/v1/knowledge-bases/{knowledge_base_id}/documents/{status}",
-            params=params,
+            params={"page": page, "page_size": page_size},
         )
         return [KnowledgeBaseDocument(**doc) for doc in response["items"]]
+
+    async def _adocuments_page(
+        self,
+        knowledge_base_id: str,
+        status: DocumentStatus,
+        page: int,
+        page_size: int,
+    ) -> builtins.list[KnowledgeBaseDocument]:
+        response = await self.client.aget(
+            f"/v1/knowledge-bases/{knowledge_base_id}/documents/{status}",
+            params={"page": page, "page_size": page_size},
+        )
+        return [KnowledgeBaseDocument(**doc) for doc in response["items"]]
+
+    def iter_documents(
+        self,
+        knowledge_base_id: str,
+        status: DocumentStatus | None = None,
+        *,
+        page_size: int = 100,
+        include_folders: bool = False,
+    ) -> Iterator[KnowledgeBaseDocument]:
+        """Yield every document in a knowledge base, auto-paginating."""
+        for st in _statuses_to_iter(status, include_folders=include_folders):
+            page = 1
+            while True:
+                batch = self._documents_page(knowledge_base_id, st, page, page_size)
+                yield from batch
+                if len(batch) < page_size:
+                    break
+                page += 1
+
+    async def aiter_documents(
+        self,
+        knowledge_base_id: str,
+        status: DocumentStatus | None = None,
+        *,
+        page_size: int = 100,
+        include_folders: bool = False,
+    ) -> AsyncIterator[KnowledgeBaseDocument]:
+        for st in _statuses_to_iter(status, include_folders=include_folders):
+            page = 1
+            while True:
+                batch = await self._adocuments_page(
+                    knowledge_base_id, st, page, page_size
+                )
+                for doc in batch:
+                    yield doc
+                if len(batch) < page_size:
+                    break
+                page += 1
+
+    def list_documents(
+        self,
+        knowledge_base_id: str,
+        status: DocumentStatus | None = None,
+        page: int = 1,
+        page_size: int = 10,
+        *,
+        include_folders: bool = False,
+    ) -> builtins.list[KnowledgeBaseDocument]:
+        """List documents; ``status=None`` returns every document across all statuses."""
+        if status is not None:
+            return self._documents_page(knowledge_base_id, status, page, page_size)
+        return list(
+            self.iter_documents(
+                knowledge_base_id,
+                page_size=page_size,
+                include_folders=include_folders,
+            )
+        )
 
     async def alist_documents(
         self,
         knowledge_base_id: str,
-        status: DocumentStatus,
+        status: DocumentStatus | None = None,
         page: int = 1,
         page_size: int = 10,
+        *,
+        include_folders: bool = False,
     ) -> builtins.list[KnowledgeBaseDocument]:
-        params: dict[str, Any] = {"page": page, "page_size": page_size}
-        if status:
-            params["status"] = status
-
-        response = await self.client.aget(
-            f"/v1/knowledge-bases/{knowledge_base_id}/documents/{status}",
-            params=params,
-        )
-        return [KnowledgeBaseDocument(**doc) for doc in response["items"]]
+        if status is not None:
+            return await self._adocuments_page(
+                knowledge_base_id, status, page, page_size
+            )
+        return [
+            doc
+            async for doc in self.aiter_documents(
+                knowledge_base_id,
+                page_size=page_size,
+                include_folders=include_folders,
+            )
+        ]
 
     def create_document(
         self, knowledge_base_id: str, document: CreateDocument
@@ -792,4 +961,190 @@ class KnowledgeBaseService(BaseService[KnowledgeBase]):
             f"/v1/knowledge-bases/{knowledge_base_id}/upload_train",
             files=files_list,
             params={"prefix": prefix},
+        )
+
+    # ── knowledge base updates ─────────────────────────────────────────
+    def update(
+        self,
+        knowledge_base_id: str,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+        document_types: builtins.list[str] | None = None,
+    ) -> KnowledgeBase:
+        """Update a knowledge base. Only the fields you pass are sent."""
+        body = _prune(
+            {
+                "name": name,
+                "description": description,
+                "document_types": document_types,
+            }
+        )
+        response = self.client.patch(f"/v1/knowledge-bases/{knowledge_base_id}", body)
+        return KnowledgeBase(client=self.client, **response)
+
+    async def aupdate(
+        self,
+        knowledge_base_id: str,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+        document_types: builtins.list[str] | None = None,
+    ) -> KnowledgeBase:
+        body = _prune(
+            {
+                "name": name,
+                "description": description,
+                "document_types": document_types,
+            }
+        )
+        response = await self.client.apatch(
+            f"/v1/knowledge-bases/{knowledge_base_id}", body
+        )
+        return KnowledgeBase(client=self.client, **response)
+
+    # ── ingestion recovery ─────────────────────────────────────────────
+    def dismiss_document(
+        self, knowledge_base_id: str, document_id: str
+    ) -> KnowledgeBaseDocument:
+        """Dismiss a failed document so it stops surfacing as an error."""
+        response = self.client.patch(
+            f"/v1/knowledge-bases/{knowledge_base_id}/document/{document_id}/dismiss",
+            {},
+        )
+        return KnowledgeBaseDocument(**response)
+
+    async def adismiss_document(
+        self, knowledge_base_id: str, document_id: str
+    ) -> KnowledgeBaseDocument:
+        response = await self.client.apatch(
+            f"/v1/knowledge-bases/{knowledge_base_id}/document/{document_id}/dismiss",
+            {},
+        )
+        return KnowledgeBaseDocument(**response)
+
+    def retry_document(self, knowledge_base_id: str, document_id: str) -> RunID:
+        """Re-run ingestion for one document; returns the new run id."""
+        return self.client.post(
+            f"/v1/knowledge-bases/{knowledge_base_id}/document/{document_id}/retry"
+        )
+
+    async def aretry_document(self, knowledge_base_id: str, document_id: str) -> RunID:
+        return await self.client.apost(
+            f"/v1/knowledge-bases/{knowledge_base_id}/document/{document_id}/retry"
+        )
+
+    def retry_all(self, knowledge_base_id: str) -> builtins.list[RunID]:
+        """Re-run ingestion for every failed document; returns the run ids."""
+        return self.client.post(f"/v1/knowledge-bases/{knowledge_base_id}/retry_all")
+
+    async def aretry_all(self, knowledge_base_id: str) -> builtins.list[RunID]:
+        return await self.client.apost(
+            f"/v1/knowledge-bases/{knowledge_base_id}/retry_all"
+        )
+
+    def list_ingestion_documents(
+        self, knowledge_base_id: str
+    ) -> builtins.list[KnowledgeBaseDocument]:
+        """Documents currently being ingested."""
+        response = self.client.get(
+            f"/v1/knowledge-bases/{knowledge_base_id}/documents/ingestion"
+        )
+        return [KnowledgeBaseDocument(**doc) for doc in response]
+
+    async def alist_ingestion_documents(
+        self, knowledge_base_id: str
+    ) -> builtins.list[KnowledgeBaseDocument]:
+        response = await self.client.aget(
+            f"/v1/knowledge-bases/{knowledge_base_id}/documents/ingestion"
+        )
+        return [KnowledgeBaseDocument(**doc) for doc in response]
+
+    # ── catalog ────────────────────────────────────────────────────────
+    def get_mime_types(self) -> builtins.list[dict]:
+        """Mime types a knowledge base can ingest."""
+        return self.client.get("/v1/knowledge-bases/mime-types")
+
+    async def aget_mime_types(self) -> builtins.list[dict]:
+        return await self.client.aget("/v1/knowledge-bases/mime-types")
+
+    def get_types(self) -> builtins.list[dict]:
+        """Knowledge base types available to this workspace."""
+        return self.client.get("/v1/knowledge-bases/types")
+
+    async def aget_types(self) -> builtins.list[dict]:
+        return await self.client.aget("/v1/knowledge-bases/types")
+
+    # ── export / import ────────────────────────────────────────────────
+    def export(
+        self,
+        knowledge_base_id: str,
+        *,
+        version: ExportFormat = "auto",
+        set_active_on_import: bool = False,
+    ) -> bytes:
+        """Export a knowledge base bundle.
+
+        ``auto`` (the default) emits the legacy base64 bundle for back-compat;
+        pass ``v4`` for plaintext multi-doc YAML (.nx) or ``v3`` for base64.
+        """
+        response = self.client._request(
+            "POST",
+            f"/v1/knowledge-bases/{knowledge_base_id}/export",
+            params={
+                "version": version,
+                "set_active_on_import": set_active_on_import,
+            },
+        )
+        return response.content
+
+    async def aexport(
+        self,
+        knowledge_base_id: str,
+        *,
+        version: ExportFormat = "auto",
+        set_active_on_import: bool = False,
+    ) -> bytes:
+        response = await self.client._arequest(
+            "POST",
+            f"/v1/knowledge-bases/{knowledge_base_id}/export",
+            params={
+                "version": version,
+                "set_active_on_import": set_active_on_import,
+            },
+        )
+        return response.content
+
+    def import_(
+        self,
+        definition: str | bytes,
+        *,
+        version: ExportFormat = "auto",
+        mode: ImportMode = "clone",
+        activate: bool = False,
+        dry_run: bool = False,
+    ) -> builtins.list[dict]:
+        """Import a bundle produced by ``export``.
+
+        ``dry_run=True`` reports what would land without writing anything.
+        """
+        return self.client.post(
+            "/v1/knowledge-bases/import",
+            import_body(definition, version),
+            params=import_params(mode, activate, dry_run),
+        )
+
+    async def aimport_(
+        self,
+        definition: str | bytes,
+        *,
+        version: ExportFormat = "auto",
+        mode: ImportMode = "clone",
+        activate: bool = False,
+        dry_run: bool = False,
+    ) -> builtins.list[dict]:
+        return await self.client.apost(
+            "/v1/knowledge-bases/import",
+            import_body(definition, version),
+            params=import_params(mode, activate, dry_run),
         )

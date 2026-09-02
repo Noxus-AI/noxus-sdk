@@ -12,7 +12,7 @@ To install the SDK, run the following command in the root directory of the proje
 pip install .
 ```
 
-The SDK requires Python 3.8 or later and automatically installs all necessary dependencies.
+The SDK requires Python 3.10 or later and automatically installs all necessary dependencies.
 
 ## Startup
 
@@ -778,45 +778,163 @@ large_page = client.conversations.list(page=1, page_size=50)
 
 Pagination helps you manage large sets of data efficiently by retrieving only what you need.
 
-## MCP Server
+To iterate every item without managing pages yourself, use the `iter_*` helpers where
+available — for example, list every document in a knowledge base across all statuses:
 
-The Noxus SDK includes a built-in [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that exposes 39 tools across workflows, agents, conversations, knowledge bases, runs, files, and admin operations. This allows MCP-compatible clients like **Cursor**, **Claude Desktop**, or **Windsurf** to interact with the Noxus platform directly.
+```python
+kb = client.knowledge_bases.get("kb-id")
 
-### Local Usage (CLI)
+# All documents (auto-paginated, all statuses, folders excluded)
+for doc in kb.iter_documents():
+    print(doc.name, doc.status)
 
-Start the MCP server locally using the `noxus` CLI:
-
-```bash
-# stdio transport (default — for local MCP clients)
-noxus mcp serve --api-key YOUR_API_KEY
-
-# SSE transport
-noxus mcp serve --transport sse --port 8888
-
-# Streamable HTTP transport (recommended for remote use)
-noxus mcp serve --transport http --port 8000 --path /mcp
+# Or materialize them
+docs = kb.list_documents()          # status=None → everything
+trained = kb.list_documents("trained")  # a single status, one page
 ```
 
-Environment variables can be used instead of flags:
+## More resources
 
-| Variable | Description |
-|----------|-------------|
-| `NOXUS_API_KEY` | Platform API key (required for stdio/sse) |
-| `NOXUS_BACKEND_URL` | Backend URL (default: `https://backend.noxus.ai`) |
+Beyond workflows, agents, conversations and knowledge bases, the client exposes:
 
-### Production Deployment
+### Tables
 
-In production the MCP server runs **inside the Noxus backend**: the backend
-mounts the MCP ASGI sub-app at `<backend>/mcp` (`spotflow_backend.main`), where
-the tools execute in-process against the platform. There is no standalone MCP
-deployment — point remote MCP clients at the backend's `/mcp` path.
+Structured data you can query with SQL.
+
+```python
+table = client.tables.create(
+    "contacts", columns=[{"name": "email", "type": "text"}]
+)
+table.insert({"email": "a@b.com"})
+for row in table.iter_rows():           # auto-paginating
+    print(row)
+
+result = client.tables.query("select count(*) from contacts")
+print(result.columns, result.rows)
+```
+
+### Sandboxes
+
+Create isolated environments and run commands/code in them
+([OpenSandbox](https://github.com/opensandbox-group/OpenSandbox)-shaped).
+
+```python
+with client.sandboxes.create(label="report") as sb:   # auto-destroyed on exit
+    sb.files.write("/work/run.py", "print('hi')")
+    result = sb.commands.run("python /work/run.py")
+    print(result.stdout, result.exit_code)             # a non-zero exit is a result, not an error
+```
+
+### Triggers
+
+Read a workflow's triggers and browse the events they receive.
+
+```python
+for trigger in client.triggers.list("workflow-id"):
+    for event in client.triggers.iter_events("workflow-id", trigger["id"]):
+        print(event)
+
+client.triggers.events(event_type="webhook", started_run=True)  # all events, filtered
+```
+
+### Variables & secrets
+
+Workspace-scoped config. Secret **values are write-only** — `list` returns
+`has_value`, never the plaintext.
+
+```python
+client.variables.create("OPENAI_KEY", value="sk-...", kind="secret")
+for var in client.variables.list():
+    print(var["name"], var["kind"])
+```
+
+### Analytics & insights
+
+```python
+from datetime import datetime, timedelta, timezone
+
+end = datetime.now(timezone.utc)
+client.analytics.get("flow_runs", end - timedelta(days=7), end)   # workspace metrics
+
+client.insights.csat_score("agent-id", days=30)                   # agent dashboards
+client.insights.top_topics("agent-id")
+```
+
+### Runs
+
+```python
+client.runs.run_sync("workflow-id", {"input": "hello"})   # run and block for output
+run = client.runs.get("workflow-id", "run-id")
+run.stop()
+client.runs.search("error", search_in=["output"])         # full-text over run I/O
+```
+
+### Admin & system keys
+
+Ordinary API keys are workspace-scoped. Tenant-wide operations need a **system
+key** — minted (by a tenant admin) in the tenant's hidden system workspace, and
+the only kind of key allowed to carry tenant permissions.
+
+```python
+key = client.admin.create_system_key("ci", permissions=["users:read"])
+# use key.value as NOXUS_API_KEY for a client that can do tenant-scoped reads
+for user in client.admin.list_users():
+    print(user.email, user.tenant_admin)
+```
+
+## Error Handling
+
+Failed requests raise a typed exception from `noxus_sdk.errors`. Every error derives
+from `NoxusApiError` (aliased as `RequestFailedError` for backwards compatibility) and
+carries `.status_code`, `.body`, and `.request_id`:
+
+```python
+from noxus_sdk.errors import NotFoundError, RateLimitedError, NoxusApiError
+
+try:
+    wf = client.workflows.get("does-not-exist")
+except NotFoundError as e:
+    print(e.status_code, e.request_id)  # 404, ...
+except NoxusApiError as e:              # catch-all for any API error
+    print(e.status_code, e.body)
+```
+
+Available types: `BadRequestError` (400), `UnauthorizedError` (401), `ForbiddenError`
+(403), `NotFoundError` (404), `ValidationError` (422), `RateLimitedError` (429), and
+`ServerError` (5xx).
+
+**Rate limits** are retried automatically with exponential backoff honoring the
+`Retry-After` header, up to `max_retries` (default 5); once exhausted a
+`RateLimitedError` is raised. Tune it per client:
+
+```python
+client = Client(api_key="...", max_retries=10)
+```
+
+**Connection reuse.** The client keeps pooled `httpx` connections. Use it as a context
+manager (sync or async) to release them deterministically, or call `client.close()` /
+`await client.aclose()`:
+
+```python
+with Client.from_env() as client:      # reads NOXUS_API_KEY / NOXUS_BACKEND_URL
+    client.workflows.list()
+```
+
+## MCP Server
+
+The Noxus platform hosts a [Model Context Protocol](https://modelcontextprotocol.io/)
+(MCP) server that exposes tools across workflows, agents, conversations, knowledge
+bases, runs, files, and admin operations. This lets MCP-compatible clients like
+**Cursor**, **Claude Desktop**, or **Windsurf** interact with the platform directly.
+
+The MCP server runs **inside the Noxus backend**: it mounts the MCP ASGI sub-app at
+`<backend>/mcp` (`spotflow_backend.main`), where the tools execute in-process against
+the platform. There is no standalone MCP deployment and no local server to run — point
+your MCP client at the backend's `/mcp` path.
 
 Each MCP client authenticates per-request with `Authorization: Bearer <key>`
 (a Noxus API key, or a platform-minted MCP JWT). No shared secrets live in the
 deployment, and horizontal scaling works out of the box (stateless).
-
-The `noxus mcp serve` CLI above remains for local stdio/sse use against a
-remote backend.
 
 ### Client Configuration
 
@@ -839,16 +957,16 @@ Add to your Cursor MCP settings (`.cursor/mcp.json`). The Bearer token is your N
 
 #### Claude Desktop
 
-For local stdio transport, add to your Claude Desktop config (`claude_desktop_config.json`):
+Add a remote MCP server pointing at the backend's `/mcp` path. The Bearer token is
+your Noxus platform API key:
 
 ```json
 {
   "mcpServers": {
     "noxus": {
-      "command": "noxus",
-      "args": ["mcp", "serve"],
-      "env": {
-        "NOXUS_API_KEY": "your_api_key"
+      "url": "https://backend.noxus.ai/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_NOXUS_API_KEY"
       }
     }
   }
@@ -871,6 +989,15 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 ## Contact
 
 For any questions or issues, please contact support@noxus.ai.
+
+## Agent skills
+
+The [`skills/noxus-sdk/`](skills/noxus-sdk/) folder ships an agent skill for this
+SDK: a `SKILL.md` entry point (client setup, auth, the typed error hierarchy,
+sync vs async, pagination, and a map of all 15 services) plus per-domain
+reference files (workflows/runs, agents/conversations, knowledge bases, tables,
+sandboxes, deployments/triggers, admin). Point an AI coding agent at it to get
+accurate, example-driven guidance for scripting the platform.
 
 ## Additional Resources
 
