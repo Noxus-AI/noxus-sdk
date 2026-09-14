@@ -177,12 +177,92 @@ class TestConversationSetattr:
                     {
                         "id": str(uuid4()),
                         "created_at": "2024-01-01T00:00:00",
-                        "message_parts": [{"role": "assistant", "content": "hi"}],
+                        "pydantic_message_parts": [
+                            {
+                                "kind": "response",
+                                "parts": [{"part_kind": "text", "content": "hi"}],
+                            }
+                        ],
                     }
                 ],
             }
         )
         assert len(conv.messages) == 1
+
+    def test_message_parts_survives_the_pydantic_migration(self):
+        """DEV-1854: the v1 API still serves ``message_parts``.
+
+        The platform stopped storing that shape and now projects it from the
+        pydantic history, but it is still on the wire. If the model drops the
+        field, pydantic discards it silently and every SDK caller reading
+        ``message.message_parts`` gets nothing back.
+        """
+        conv = Conversation(client=_client(), **_minimal_conversation())
+        conv._update_w_response(
+            {
+                "messages": [
+                    {
+                        "id": str(uuid4()),
+                        "created_at": "2024-01-01T00:00:00",
+                        "message_parts": [
+                            {"type": "markdown", "role": "assistant", "content": "hi"}
+                        ],
+                        "pydantic_message_parts": [
+                            {
+                                "kind": "response",
+                                "parts": [{"part_kind": "text", "content": "hi"}],
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+        message = conv.messages[0]
+        assert message.message_parts == [
+            {"type": "markdown", "role": "assistant", "content": "hi"}
+        ]
+        assert message.pydantic_message_parts
+
+    def test_a_response_without_message_parts_still_parses(self):
+        """Older deployments may not send it; the field must not be required."""
+        conv = Conversation(client=_client(), **_minimal_conversation())
+        conv._update_w_response(
+            {
+                "messages": [
+                    {
+                        "id": str(uuid4()),
+                        "created_at": "2024-01-01T00:00:00",
+                        "pydantic_message_parts": [],
+                    }
+                ],
+            }
+        )
+        assert conv.messages[0].message_parts == []
+
+    def test_a_response_without_pydantic_message_parts_still_parses(self):
+        """The mirror case: a backend older than DEV-1854 never sends it.
+
+        The SDK and the platform upgrade independently — an on-prem customer
+        can pip-install a new SDK long before their VM takes the release. If
+        this field is required, every message of every conversation fetched
+        from that backend fails validation, which is the same trap
+        ``message_parts`` was defaulted to avoid.
+        """
+        conv = Conversation(client=_client(), **_minimal_conversation())
+        conv._update_w_response(
+            {
+                "messages": [
+                    {
+                        "id": str(uuid4()),
+                        "created_at": "2024-01-01T00:00:00",
+                        "message_parts": [
+                            {"type": "markdown", "role": "assistant", "content": "hi"}
+                        ],
+                    }
+                ],
+            }
+        )
+        assert conv.messages[0].pydantic_message_parts == []
 
 
 # ════════════════════════════════════════════════════════════════════

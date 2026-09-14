@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from typing import TYPE_CHECKING, Any, AsyncIterator, Iterator
+from typing import TYPE_CHECKING, Any, AsyncIterator, Iterator, Literal
 
 from pydantic import ConfigDict
 
@@ -11,6 +11,9 @@ from noxus_sdk.resources.base import BaseResource, BaseService
 
 if TYPE_CHECKING:
     import builtins
+
+# Which part of a run `RunService.search` looks in.
+SearchIn = Literal["input", "output", "other", "run_id"]
 
 
 class RunFailureError(Exception):
@@ -63,6 +66,28 @@ class Run(BaseResource):
             if hasattr(self, key):
                 setattr(self, key, value)
         return self
+
+    def stop(self) -> Run:
+        """Stop this run; returns the run in its post-stop state."""
+        response = self.client.post(f"/v1/runs/{self.id}/stop")
+        return Run(client=self.client, **response)
+
+    async def astop(self) -> Run:
+        response = await self.client.apost(f"/v1/runs/{self.id}/stop")
+        return Run(client=self.client, **response)
+
+    def data(self, *, fetch_structured_data: bool = True) -> dict:
+        """Full run data — per-node inputs/outputs and execution detail."""
+        return self.client.get(
+            f"/v1/runs/{self.id}/data",
+            params={"fetch_structured_data": fetch_structured_data},
+        )
+
+    async def adata(self, *, fetch_structured_data: bool = True) -> dict:
+        return await self.client.aget(
+            f"/v1/runs/{self.id}/data",
+            params={"fetch_structured_data": fetch_structured_data},
+        )
 
     def stream(self, etag: str | None = None) -> Iterator[RunEvent]:
         """Stream run events via SSE. Yields RunEvent objects until the run completes."""
@@ -184,6 +209,103 @@ class RunService(BaseService[Run]):
     async def aget(self, workflow_id: str, run_id: str) -> Run:
         response = await self.client.aget(f"/v1/workflows/{workflow_id}/runs/{run_id}")
         return Run(client=self.client, **response)
+
+    def stop(self, run_id: str) -> Run:
+        return Run(client=self.client, **self.client.post(f"/v1/runs/{run_id}/stop"))
+
+    async def astop(self, run_id: str) -> Run:
+        response = await self.client.apost(f"/v1/runs/{run_id}/stop")
+        return Run(client=self.client, **response)
+
+    def get_data(self, run_id: str, *, fetch_structured_data: bool = True) -> dict:
+        return self.client.get(
+            f"/v1/runs/{run_id}/data",
+            params={"fetch_structured_data": fetch_structured_data},
+        )
+
+    async def aget_data(
+        self, run_id: str, *, fetch_structured_data: bool = True
+    ) -> dict:
+        return await self.client.aget(
+            f"/v1/runs/{run_id}/data",
+            params={"fetch_structured_data": fetch_structured_data},
+        )
+
+    def _search_body(
+        self,
+        query: str,
+        limit: int,
+        offset: int,
+        exact: bool,
+        search_in: builtins.list[SearchIn] | None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "query": query,
+            "limit": limit,
+            "offset": offset,
+            "exact": exact,
+        }
+        if search_in is not None:
+            body["search_in"] = search_in
+        return body
+
+    def search(
+        self,
+        query: str,
+        *,
+        limit: int = 10,
+        offset: int = 0,
+        exact: bool = True,
+        search_in: builtins.list[SearchIn] | None = None,
+    ) -> builtins.list[dict]:
+        """Full-text search across this workspace's run inputs/outputs."""
+        response = self.client.post(
+            "/v1/runs/search",
+            self._search_body(query, limit, offset, exact, search_in),
+        )
+        return response.get("items", [])
+
+    async def asearch(
+        self,
+        query: str,
+        *,
+        limit: int = 10,
+        offset: int = 0,
+        exact: bool = True,
+        search_in: builtins.list[SearchIn] | None = None,
+    ) -> builtins.list[dict]:
+        response = await self.client.apost(
+            "/v1/runs/search",
+            self._search_body(query, limit, offset, exact, search_in),
+        )
+        return response.get("items", [])
+
+    def run_sync(
+        self,
+        workflow_id: str,
+        input: dict,
+        *,
+        output_only: bool = False,
+    ) -> dict:
+        """Run a workflow and block until it finishes, returning its output."""
+        return self.client.post(
+            f"/v1/workflows/{workflow_id}/runs/sync",
+            {"input": input},
+            params={"output_only": output_only},
+        )
+
+    async def arun_sync(
+        self,
+        workflow_id: str,
+        input: dict,
+        *,
+        output_only: bool = False,
+    ) -> dict:
+        return await self.client.apost(
+            f"/v1/workflows/{workflow_id}/runs/sync",
+            {"input": input},
+            params={"output_only": output_only},
+        )
 
     def get_node_io(self, run_id: str, node_id: str, it: int = 0) -> dict:
         return self.client.get(f"/v1/runs/{run_id}/io/{node_id}", params={"it": it})

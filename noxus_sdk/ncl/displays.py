@@ -551,6 +551,7 @@ class ConfigPlaybookEditor(BaseConfigDisplay):
 
 AnyConfigDisplay = Annotated[
     ConfigText
+    | ConfigPassword
     | ConfigNumber
     | ConfigNumberSlider
     | ConfigNumberRangeSlider

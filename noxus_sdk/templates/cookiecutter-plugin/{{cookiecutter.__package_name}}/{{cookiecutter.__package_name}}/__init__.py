@@ -22,6 +22,7 @@ class {{ cookiecutter.__package_name.replace('-', ' ').title().replace(' ', '') 
     name = "{{ cookiecutter.__package_name }}"
     display_name = "{{ cookiecutter.plugin_name }}"
     version = "0.1.0"
+    execution_slots = 1  # Each slot provides 1/8 CPU core and 256 MiB.
     description = "{{ cookiecutter.description }}"
     author = "{{ cookiecutter.author_name }}"
 

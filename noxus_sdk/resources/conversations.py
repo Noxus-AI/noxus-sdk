@@ -366,7 +366,14 @@ class MessageRequest(BaseModel):
 class Message(BaseModel):
     id: UUID
     created_at: datetime
-    message_parts: list[dict]
+    # Both defaulted, in both directions: the SDK and the platform upgrade
+    # independently, so a given SDK meets backends on either side of
+    # DEV-1854. A backend older than it sends message_parts and no
+    # pydantic_message_parts; this one sends both, projecting the former from
+    # the latter. Requiring either would fail every message of every
+    # conversation fetched from the other side.
+    pydantic_message_parts: list[dict] = []
+    message_parts: list[dict] = []
 
 
 class ChatMessage(BaseModel):

@@ -65,6 +65,16 @@ class BasePlugin(Generic[ConfigType]):
     # Required for execution == "remote"
     endpoint: str | None = None
 
+    # Optional shell command the platform runs inside the sandbox once at
+    # provision time (after the dependency install). Use it to install system
+    # packages or CLI tools nodes shell out to. Must be idempotent — a
+    # re-provision runs it again — and must never embed credentials.
+    setup_command: str | None = None
+
+    # Sandbox budget for the warm worker, in manager slots (1/8 CPU + 256 MiB
+    # each). Raise it for plugins that crunch data in-process.
+    execution_slots: int = 1
+
     # Internal variables (not exposed to the user)
     _config_class: type[
         ConfigType
@@ -119,6 +129,8 @@ class BasePlugin(Generic[ConfigType]):
             execution=cls.execution,
             image=cls.image,
             endpoint=cls.endpoint,
+            setup_command=cls.setup_command,
+            execution_slots=cls.execution_slots,
             nodes=[node.get_definition() for node in v1_nodes],
             nodes_v2=[node.get_definition() for node in v2_nodes],
             integrations=[
