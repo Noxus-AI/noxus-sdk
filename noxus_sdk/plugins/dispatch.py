@@ -20,11 +20,13 @@ from __future__ import annotations
 
 import inspect
 from datetime import datetime
-from typing import TYPE_CHECKING
+from types import UnionType
+from typing import TYPE_CHECKING, Union, get_args, get_origin
 
 from loguru import logger
 from pydantic import ValidationError
 
+from noxus_sdk.integrations.schemas import DeviceAuthPoll, DeviceAuthStart
 from noxus_sdk.nodes.connector import DataType
 from noxus_sdk.nodes.schemas import ConfigResponse, ExecutionResponse
 from noxus_sdk.schemas import ValidationResult
@@ -109,7 +111,8 @@ class PluginDispatcher:
         node_class = self._node(node_name)
         logger.debug(f"Creating node instance for {node_class.__name__}")
 
-        node_config = node_class.get_config_class()(**config)
+        config_class = node_class.get_config_class()
+        node_config = config_class(**_coerce_config_values(config_class, config))
         node_instance = node_class(node_config)
 
         typed_inputs = _coerce_inputs(node_instance, inputs)
@@ -158,6 +161,26 @@ class PluginDispatcher:
     ) -> bool:
         """Check whether an integration is ready for the given credentials."""
         return await self._integration(integration_name).is_ready(creds)
+
+    async def integration_device_auth_start(
+        self, integration_name: str, ctx: RemoteExecutionContext
+    ) -> DeviceAuthStart:
+        integration = self._integration(integration_name)
+        if not integration.supports_device_auth:
+            raise ComponentNotFoundError(
+                f"Integration '{integration_name}' does not support device auth"
+            )
+        return await integration.device_auth_start(ctx)
+
+    async def integration_device_auth_poll(
+        self, integration_name: str, ctx: RemoteExecutionContext, session_id: str
+    ) -> DeviceAuthPoll:
+        integration = self._integration(integration_name)
+        if not integration.supports_device_auth:
+            raise ComponentNotFoundError(
+                f"Integration '{integration_name}' does not support device auth"
+            )
+        return await integration.device_auth_poll(ctx, session_id)
 
     # -- triggers --------------------------------------------------------------
 
@@ -226,6 +249,29 @@ class PluginDispatcher:
         except Exception as e:  # noqa: BLE001 - untrusted plugin validation code; report, don't crash
             logger.error(f"Unexpected error during configuration validation: {e}")
             return ValidationResult(valid=False, errors=[f"Unexpected error: {e!s}"])
+
+
+def _is_list_annotation(ann) -> bool:  # noqa: ANN001 - typing annotation object
+    if ann is list or get_origin(ann) is list:
+        return True
+    if get_origin(ann) in (Union, UnionType):
+        return any(_is_list_annotation(a) for a in get_args(ann))
+    return False
+
+
+def _coerce_config_values(config_class, config: dict) -> dict:  # noqa: ANN001
+    """Split comma-separated text into list-typed config fields.
+
+    The generic host editor renders every scalar setting row as a text input,
+    so a list-typed setting (APT packages) arrives as ``"jq, ripgrep"``; split
+    it rather than failing pydantic validation on the whole execution.
+    """
+    coerced = dict(config)
+    for name, field in config_class.model_fields.items():
+        val = coerced.get(name)
+        if isinstance(val, str) and _is_list_annotation(field.annotation):
+            coerced[name] = [p for p in (s.strip() for s in val.split(",")) if p]
+    return coerced
 
 
 def _coerce_inputs(node_instance, inputs: dict) -> dict:  # noqa: ANN001 - BaseNode instance

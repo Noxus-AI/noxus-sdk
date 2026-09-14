@@ -3,6 +3,7 @@ from uuid import uuid4
 import httpx
 import pytest
 from noxus_sdk.client import Client
+from noxus_sdk.errors import NotFoundError
 from noxus_sdk.resources.assistants import (
     AgentSettings,
 )
@@ -250,7 +251,7 @@ async def test_agent_with_all_tool_types(client: Client):
 @pytest.mark.anyio
 async def test_nonexistent_agent(client: Client):
     agent_id = str(uuid4())  # Mock agent ID
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(NotFoundError):
         res = await client.agents.aget(agent_id)
 
 
@@ -263,7 +264,7 @@ async def test_delete_agent(client: Client, agent_settings: AgentSettings):
     await client.agents.adelete(agent.id)
 
     # Verify it's gone
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(NotFoundError):
         await client.agents.aget(agent.id)
 
 
@@ -300,7 +301,7 @@ def test_synchronous_agent_operations(client: Client, agent_settings: AgentSetti
         client.agents.delete(agent.id)
 
         # Verify deletion
-        with pytest.raises(httpx.HTTPStatusError):
+        with pytest.raises(NotFoundError):
             client.agents.get(agent.id)
 
 

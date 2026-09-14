@@ -1,10 +1,18 @@
 from __future__ import annotations
 
-from typing import Type, TypeVar, Generic, ClassVar, Any, get_args
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, Type, TypeVar, cast, get_args
 from pydantic import BaseModel
 
-from noxus_sdk.integrations.schemas import IntegrationDefinition
+from noxus_sdk.integrations.schemas import (
+    DeviceAuthPoll,
+    DeviceAuthStart,
+    IntegrationDefinition,
+    IntegrationProviderDefinition,
+)
 from noxus_sdk.ncl import serialize_config
+
+if TYPE_CHECKING:
+    from noxus_sdk.plugins.context import RemoteExecutionContext
 
 
 class BaseCredentials(BaseModel):
@@ -26,6 +34,7 @@ class BaseIntegration(Generic[CredentialsType]):
     visible: bool = True
     scopes: list[str] | None = None  # Will be set to an empty list if not set
     properties: dict[str, str] | None = None  # Will be set to an empty dict if not set
+    providers: list[IntegrationProviderDefinition] = []
     credentials_class: Type[CredentialsType]
     plugin_id: str | None = (
         None  # ID of the plugin that this integration belongs to (None for integrations that don't come from a plugin)
@@ -33,6 +42,10 @@ class BaseIntegration(Generic[CredentialsType]):
     plugin_name: str | None = (
         None  # Name of the plugin that this integration belongs to (None for integrations that don't come from a plugin)
     )
+    # Device-code sign-in support: override device_auth_start/poll and flip
+    # this on to get the platform's generic "Sign in …" connect flow.
+    supports_device_auth: ClassVar[bool] = False
+    device_auth_label: ClassVar[str | None] = None
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -48,6 +61,9 @@ class BaseIntegration(Generic[CredentialsType]):
 
         if cls.properties is None:
             cls.properties = {}
+
+        if "providers" not in cls.__dict__:
+            cls.providers = []
 
     @classmethod
     def get_credentials(cls, creds: dict[str, Any] | None) -> CredentialsType | None:
@@ -75,7 +91,8 @@ class BaseIntegration(Generic[CredentialsType]):
     @classmethod
     def get_config(cls) -> dict:
         """Get the config of the integration"""
-        config = serialize_config(cls.credentials_class)
+        # serialize_config's annotation predates type[]; it takes a model class.
+        config = serialize_config(cast(BaseModel, cls.credentials_class))
         return config
 
     @classmethod
@@ -84,6 +101,18 @@ class BaseIntegration(Generic[CredentialsType]):
 
         # Feature flags are a object of type FeatureFlags, but we cant type it here because its outside the scope of this package
         return cls.visible
+
+    @classmethod
+    async def device_auth_start(cls, ctx: RemoteExecutionContext) -> DeviceAuthStart:
+        """Begin a device-code sign-in. Override together with
+        ``device_auth_poll`` and set ``supports_device_auth = True``."""
+        raise NotImplementedError(f"{cls.type} does not support device auth")
+
+    @classmethod
+    async def device_auth_poll(
+        cls, ctx: RemoteExecutionContext, session_id: str
+    ) -> DeviceAuthPoll:
+        raise NotImplementedError(f"{cls.type} does not support device auth")
 
     @classmethod
     def get_definition(cls) -> IntegrationDefinition:
@@ -95,5 +124,8 @@ class BaseIntegration(Generic[CredentialsType]):
             image=cls.image,
             scopes=cls.scopes,
             properties=cls.properties,
+            providers=cls.providers,
             config=cls.get_config(),
+            supports_device_auth=cls.supports_device_auth,
+            device_auth_label=cls.device_auth_label,
         )
