@@ -16,10 +16,12 @@ def test_generate_text(client: Client):
     with pytest.raises(ConfigError) as exc:
         n.config(label="Test")
     assert str(exc.value).startswith("Missing required config value for ")
-    n.config(label="Test", template="Write a poem about cars", model=["gpt-4o"])
+    n.config(
+        label="Test", template="Write a poem about cars", model=["gemini-2.5-flash"]
+    )
     assert n.node_config["label"] == "Test"
     assert n.node_config["template"] == "Write a poem about cars"
-    assert n.node_config["model"] == ["gpt-4o"]
+    assert n.node_config["model"] == ["gemini-2.5-flash"]
 
 
 def test_full_workflow(client: Client):

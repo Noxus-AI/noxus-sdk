@@ -3,6 +3,7 @@ from uuid import uuid4
 import httpx
 import pytest
 from noxus_sdk.client import Client
+from noxus_sdk.errors import NotFoundError
 from noxus_sdk.resources.assistants import (
     AgentSettings,
 )
@@ -22,7 +23,7 @@ from noxus_sdk.resources.workflows import WorkflowDefinition
 @pytest.fixture
 def agent_settings():
     return AgentSettings(
-        model=["gpt-4o"],
+        model=["gemini-2.5-flash"],
         temperature=0.7,
         tools=[WebResearchTool(), NoxusQaTool()],
         max_tokens=150,
@@ -82,7 +83,7 @@ async def test_update_agent(client: Client, agent_settings: AgentSettings):
     ai_node = workflow.node("TextGenerationNode").config(
         label="Test Generation",
         template="Write a poem about ((Input 1))",
-        model=["gpt-4o"],
+        model=["gemini-2.5-flash"],
     )
     output_node = workflow.node("OutputNode")
     workflow.link(input_node.output(), ai_node.input("variables", "Input 1"))
@@ -101,7 +102,7 @@ async def test_update_agent(client: Client, agent_settings: AgentSettings):
         )
         # Update settings with real workflow ID
         new_settings = ConversationSettings(
-            model=["gpt-4o"],
+            model=["gemini-2.5-flash"],
             temperature=0.5,
             tools=[WorkflowTool(workflow_id=created_workflow.id)],
             max_tokens=200,
@@ -128,7 +129,7 @@ async def test_update_agent(client: Client, agent_settings: AgentSettings):
         # Test instance update method with real KB
         instance_updated = await client.agents.aget(agent.id)
         instance_settings = ConversationSettings(
-            model=["gpt-4o"],
+            model=["gemini-2.5-flash"],
             temperature=0.8,
             tools=[KnowledgeBaseSelectorTool()],
             max_tokens=300,
@@ -192,7 +193,7 @@ async def test_agent_with_all_tool_types(client: Client):
     ai_node = workflow.node("TextGenerationNode").config(
         label="Test Generation",
         template="Write a poem about ((Input 1))",
-        model=["gpt-4o"],
+        model=["gemini-2.5-flash"],
     )
     output_node = workflow.node("OutputNode")
     workflow.link(input_node.output(), ai_node.input("variables", "Input 1"))
@@ -250,7 +251,7 @@ async def test_agent_with_all_tool_types(client: Client):
 @pytest.mark.anyio
 async def test_nonexistent_agent(client: Client):
     agent_id = str(uuid4())  # Mock agent ID
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(NotFoundError):
         res = await client.agents.aget(agent_id)
 
 
@@ -263,7 +264,7 @@ async def test_delete_agent(client: Client, agent_settings: AgentSettings):
     await client.agents.adelete(agent.id)
 
     # Verify it's gone
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(NotFoundError):
         await client.agents.aget(agent.id)
 
 
@@ -300,7 +301,7 @@ def test_synchronous_agent_operations(client: Client, agent_settings: AgentSetti
         client.agents.delete(agent.id)
 
         # Verify deletion
-        with pytest.raises(httpx.HTTPStatusError):
+        with pytest.raises(NotFoundError):
             client.agents.get(agent.id)
 
 
@@ -312,7 +313,7 @@ async def test_agent_run_workflow(client: Client):
     ai_node = workflow.node("TextGenerationNode").config(
         label="Test Generation",
         template="Write a poem about ((Input 1))",
-        model=["gpt-4o"],
+        model=["gemini-2.5-flash"],
     )
     output_node = workflow.node("OutputNode")
     workflow.link(input_node.output(), ai_node.input("variables", "Input 1"))

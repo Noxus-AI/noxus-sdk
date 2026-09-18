@@ -120,7 +120,7 @@ class UploadPluginSource(PluginSource, BaseModel):
         """
         if _platform_file_fetcher is None:
             raise RuntimeError(
-                "No platform file fetcher registered — an uploaded plugin can "
+                "No platform file fetcher registered. An uploaded plugin can "
                 "only be installed from within the platform."
             )
 

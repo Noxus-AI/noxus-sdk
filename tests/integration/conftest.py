@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 import uuid
@@ -7,10 +8,13 @@ import httpx
 import pytest
 from filelock import FileLock
 from noxus_sdk.client import Client
+from noxus_sdk.errors import NoxusApiError
 from noxus_sdk.resources.admin import Workspace
 from noxus_sdk.resources.knowledge_bases import (
     KBConfigV3,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _best_effort_delete(workspace: Workspace) -> None:
@@ -19,9 +23,9 @@ def _best_effort_delete(workspace: Workspace) -> None:
     # are reaped at the start of the next session by `workspace_client`.
     try:
         workspace.delete()
-    except httpx.HTTPError as exc:
-        print(
-            f"warning: best-effort workspace cleanup failed for {workspace.id}: {exc}"
+    except (NoxusApiError, httpx.HTTPError) as exc:
+        logger.warning(
+            "Best-effort workspace cleanup failed for %s: %s", workspace.id, exc
         )
 
 

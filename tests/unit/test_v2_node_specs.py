@@ -127,3 +127,24 @@ def test_plugin_splits_v1_and_v2_nodes() -> None:
     m = _Plugin.get_manifest()
     assert [n.type for n in m.nodes] == ["SpecV1Node"]
     assert [n.type for n in m.nodes_v2] == ["SpecV2Node"]
+
+
+def test_visible_reaches_the_manifest() -> None:
+    class _Hidden(BaseNode[_V2Config]):
+        node_name = "HiddenV1"
+        title = "Hidden"
+        description = "retired, still runnable"
+        outputs = [
+            Connector(
+                name="out",
+                label="Out",
+                definition=TypeDefinition(data_type=DataType.str),
+            )
+        ]
+        visible = False
+
+        async def call(self, ctx: Any) -> dict[str, Any]:
+            return {"out": ""}
+
+    assert _Hidden.get_definition().visible is False
+    assert _V1Node.get_definition().visible is True

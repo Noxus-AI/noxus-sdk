@@ -49,6 +49,9 @@ class BaseNode(Generic[ConfigType]):
     documentation_url: str | None = None
     example: str | None = None
     gathers_list = False
+    # False keeps the node executable for flows that already use it while dropping
+    # it from the node picker — how a superseded node is retired.
+    visible = True
     integrations: dict[str, list[str]]  # Will be set to an empty dict if not set
 
     config_class: type[ConfigType]
@@ -169,6 +172,8 @@ class BaseNode(Generic[ConfigType]):
             example=cls.example,
             integrations=list(cls.integrations.keys()),
             config_endpoint=f"/nodes/{cls.node_name}/config",
+            max_timeout=cls.max_timeout,
+            visible=cls.visible,
         )
 
     async def call(
