@@ -195,7 +195,7 @@ def list_sections() -> list[DocSection]:
 def read_page(path: str) -> DocPage:
     """Read the full content of a documentation page by path."""
     index = load_index()
-    path = path.strip("/").removesuffix(".mdx")
+    path = path.strip("/").lower().removesuffix(".mdx")
     entry = index.by_path.get(path)
     if entry is None:
         available = [e.path for e in index.entries if path.split("/")[-1] in e.path]

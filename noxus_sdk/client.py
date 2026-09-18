@@ -3,10 +3,17 @@ from __future__ import annotations
 import asyncio
 import os
 import time
-from typing import TYPE_CHECKING, Any, BinaryIO
+from typing import TYPE_CHECKING, Any, BinaryIO, cast
 
 import httpx
 from httpx_sse import ServerSentEvent, aconnect_sse, connect_sse
+
+from noxus_sdk.errors import (
+    NoxusApiError,
+    RateLimitedError,
+    RequestFailedError,
+    raise_for_status,
+)
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Iterator
@@ -15,17 +22,97 @@ FileContent = BinaryIO | bytes | str
 HttpxFile = tuple[str, tuple[str, FileContent, str | None]]
 RequestFiles = dict[str, Any] | list[HttpxFile] | None
 
+DEFAULT_TIMEOUT = 120
+DEFAULT_MAX_RETRIES = 5
+_MAX_BACKOFF_SECONDS = 30.0
 
-class RequestFailedError(Exception):
-    pass
+__all__ = [
+    "Client",
+    "NoxusApiError",
+    "RateLimitedError",
+    "RequestFailedError",
+    "Requester",
+]
 
 
 class Requester:
-    base_url = os.environ.get("NOXUS_BACKEND_URL", "https://backend.noxus.ai")
-
-    def __init__(self, api_key: str, extra_headers: dict | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        extra_headers: dict | None = None,
+        *,
+        base_url: str | None = None,
+        transport: httpx.BaseTransport | httpx.AsyncBaseTransport | None = None,
+        max_retries: int = DEFAULT_MAX_RETRIES,
+    ) -> None:
         self.api_key = api_key
         self.extra_headers = extra_headers
+        # Explicit argument > NOXUS_BACKEND_URL > production default, resolved
+        # at construction time so env changes after import still apply.
+        self.base_url = base_url or os.environ.get(
+            "NOXUS_BACKEND_URL", "https://backend.noxus.ai"
+        )
+        self._transport = transport
+        self._max_retries = max_retries
+        self._sync_client: httpx.Client | None = None
+        self._async_client: httpx.AsyncClient | None = None
+
+    # ── client lifecycle ────────────────────────────────────────────────
+    def _http(self) -> httpx.Client:
+        if self._sync_client is None:
+            self._sync_client = httpx.Client(
+                transport=cast("httpx.BaseTransport | None", self._transport),
+                follow_redirects=True,
+            )
+        return self._sync_client
+
+    def _ahttp(self) -> httpx.AsyncClient:
+        if self._async_client is None:
+            self._async_client = httpx.AsyncClient(
+                transport=cast("httpx.AsyncBaseTransport | None", self._transport),
+                follow_redirects=True,
+            )
+        return self._async_client
+
+    def close(self) -> None:
+        if self._sync_client is not None:
+            self._sync_client.close()
+            self._sync_client = None
+
+    async def aclose(self) -> None:
+        if self._async_client is not None:
+            await self._async_client.aclose()
+            self._async_client = None
+
+    def __enter__(self) -> Requester:
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self.close()
+
+    async def __aenter__(self) -> Requester:
+        return self
+
+    async def __aexit__(self, *_exc: object) -> None:
+        await self.aclose()
+
+    # ── request helpers ─────────────────────────────────────────────────
+    def _headers(self, headers: dict | None) -> dict:
+        headers_ = {"X-API-Key": self.api_key}
+        if headers:
+            headers_.update(headers)
+        if self.extra_headers:
+            headers_.update(self.extra_headers)
+        return headers_
+
+    def _backoff_seconds(self, response: httpx.Response, attempt: int) -> float:
+        retry_after = response.headers.get("Retry-After")
+        if retry_after:
+            try:
+                return min(float(retry_after), _MAX_BACKOFF_SECONDS)
+            except ValueError:
+                pass
+        return min(2.0**attempt, _MAX_BACKOFF_SECONDS)
 
     async def _arequest(
         self,
@@ -37,31 +124,24 @@ class Requester:
         params: dict | None = None,
         timeout: int | None = None,
     ) -> httpx.Response:
-        headers_ = {"X-API-Key": self.api_key}
-        if headers:
-            headers_.update(headers)
-        if self.extra_headers:
-            headers_.update(self.extra_headers)
-        ratelimited = True
-        while ratelimited:
-            async with httpx.AsyncClient() as client:
-                response = await client.request(
-                    method,
-                    f"{self.base_url}{url}",
-                    headers=headers_,
-                    follow_redirects=True,
-                    json=json,
-                    files=files,
-                    params=params,
-                    timeout=timeout or 120,
-                )
-                if response.status_code == 429:
-                    await asyncio.sleep(1)
-                    continue
-                ratelimited = False
-                response.raise_for_status()
-                return response
-        raise RequestFailedError("Request failed")
+        headers_ = self._headers(headers)
+        client = self._ahttp()
+        for attempt in range(self._max_retries + 1):
+            response = await client.request(
+                method,
+                f"{self.base_url}{url}",
+                headers=headers_,
+                json=json,
+                files=files,
+                params=params,
+                timeout=timeout or DEFAULT_TIMEOUT,
+            )
+            if response.status_code == 429 and attempt < self._max_retries:
+                await asyncio.sleep(self._backoff_seconds(response, attempt))
+                continue
+            raise_for_status(response)
+            return response
+        raise RateLimitedError("Rate limit exceeded", status_code=429)
 
     async def arequest(
         self,
@@ -112,16 +192,10 @@ class Requester:
         params_ = params or {}
         params_["page"] = params_.get("page", page)
         params_["size"] = params_.get("page_size", page_size)
-
-        headers_ = {"X-API-Key": self.api_key}
-        if headers:
-            headers_.update(headers)
-        if self.extra_headers:
-            headers_.update(self.extra_headers)
         result = await self.arequest(
             "GET",
             url,
-            headers=headers_,
+            headers=headers,
             params=params_,
             timeout=timeout,
         )
@@ -183,30 +257,24 @@ class Requester:
         params: dict | None = None,
         timeout: int | None = None,
     ) -> httpx.Response:
-        headers_ = {"X-API-Key": self.api_key}
-        if headers:
-            headers_.update(headers)
-        if self.extra_headers:
-            headers_.update(self.extra_headers)
-        ratelimited = True
-        while ratelimited:
-            response = httpx.request(
+        headers_ = self._headers(headers)
+        client = self._http()
+        for attempt in range(self._max_retries + 1):
+            response = client.request(
                 method,
                 f"{self.base_url}{url}",
                 headers=headers_,
-                follow_redirects=True,
                 json=json,
                 files=files,
                 params=params,
-                timeout=timeout or 120,
+                timeout=timeout or DEFAULT_TIMEOUT,
             )
-            if response.status_code == 429:
-                time.sleep(1)
+            if response.status_code == 429 and attempt < self._max_retries:
+                time.sleep(self._backoff_seconds(response, attempt))
                 continue
-            ratelimited = False
-            response.raise_for_status()
+            raise_for_status(response)
             return response
-        raise RequestFailedError("Request failed")
+        raise RateLimitedError("Rate limit exceeded", status_code=429)
 
     def request(
         self,
@@ -239,30 +307,28 @@ class Requester:
         timeout: int | None = None,
         method: str = "GET",
     ) -> Iterator[ServerSentEvent]:
-        headers_ = {"X-API-Key": self.api_key}
-        if headers:
-            headers_.update(headers)
-        if self.extra_headers:
-            headers_.update(self.extra_headers)
-        with httpx.Client() as client:
-            while True:
-                with connect_sse(
-                    client=client,
-                    method=method,
-                    url=f"{self.base_url}{url}",
-                    headers=headers_,
-                    follow_redirects=True,
-                    json=json,
-                    files=files,
-                    params=params,
-                    timeout=timeout or 120,
-                ) as response:
-                    if response.response.status_code == 429:
-                        time.sleep(1)
-                        continue
-                    response.response.raise_for_status()
-                    yield from response.iter_sse()
-                    return
+        headers_ = self._headers(headers)
+        client = self._http()
+        for attempt in range(self._max_retries + 1):
+            with connect_sse(
+                client=client,
+                method=method,
+                url=f"{self.base_url}{url}",
+                headers=headers_,
+                json=json,
+                files=files,
+                params=params,
+                timeout=timeout or DEFAULT_TIMEOUT,
+            ) as response:
+                if response.response.status_code == 429 and attempt < self._max_retries:
+                    time.sleep(self._backoff_seconds(response.response, attempt))
+                    continue
+                if not response.response.is_success:
+                    response.response.read()
+                raise_for_status(response.response)
+                yield from response.iter_sse()
+                return
+        raise RateLimitedError("Rate limit exceeded", status_code=429)
 
     async def aevent_stream(
         self,
@@ -274,31 +340,31 @@ class Requester:
         timeout: int | None = None,
         method: str = "GET",
     ) -> AsyncIterator[ServerSentEvent]:
-        headers_ = {"X-API-Key": self.api_key}
-        if headers:
-            headers_.update(headers)
-        if self.extra_headers:
-            headers_.update(self.extra_headers)
-        async with httpx.AsyncClient() as client:
-            while True:
-                async with aconnect_sse(
-                    client=client,
-                    method=method,
-                    url=f"{self.base_url}{url}",
-                    headers=headers_,
-                    follow_redirects=True,
-                    json=json,
-                    files=files,
-                    params=params,
-                    timeout=timeout or 120,
-                ) as response:
-                    if response.response.status_code == 429:
-                        await asyncio.sleep(1)
-                        continue
-                    response.response.raise_for_status()
-                    async for event in response.aiter_sse():
-                        yield event
-                    return
+        headers_ = self._headers(headers)
+        client = self._ahttp()
+        for attempt in range(self._max_retries + 1):
+            async with aconnect_sse(
+                client=client,
+                method=method,
+                url=f"{self.base_url}{url}",
+                headers=headers_,
+                json=json,
+                files=files,
+                params=params,
+                timeout=timeout or DEFAULT_TIMEOUT,
+            ) as response:
+                if response.response.status_code == 429 and attempt < self._max_retries:
+                    await asyncio.sleep(
+                        self._backoff_seconds(response.response, attempt)
+                    )
+                    continue
+                if not response.response.is_success:
+                    await response.response.aread()
+                raise_for_status(response.response)
+                async for event in response.aiter_sse():
+                    yield event
+                return
+        raise RateLimitedError("Rate limit exceeded", status_code=429)
 
     def get(
         self,
@@ -321,16 +387,10 @@ class Requester:
         params_ = params or {}
         params_["page"] = params_.get("page", page)
         params_["size"] = params_.get("page_size", page_size)
-
-        headers_ = {"X-API-Key": self.api_key}
-        if headers:
-            headers_.update(headers)
-        if self.extra_headers:
-            headers_.update(self.extra_headers)
         result = self.request(
             "GET",
             url,
-            headers=headers_,
+            headers=headers,
             params=params_,
             timeout=timeout,
         )
@@ -387,26 +447,41 @@ class Client(Requester):
     def __init__(
         self,
         api_key: str,
-        base_url: str = "https://backend.noxus.ai",
+        base_url: str | None = None,
         extra_headers: dict | None = None,
         *,
         load_nodes: bool = True,
         load_me: bool = True,
+        transport: httpx.BaseTransport | httpx.AsyncBaseTransport | None = None,
+        max_retries: int = DEFAULT_MAX_RETRIES,
     ) -> None:
         from noxus_sdk.resources.admin import AdminService
         from noxus_sdk.resources.agentflows import AgentFlowService
+        from noxus_sdk.resources.analytics import AnalyticsService
+        from noxus_sdk.resources.insights import InsightService
         from noxus_sdk.resources.assistants import AgentService
         from noxus_sdk.resources.conversations import ConversationService
+        from noxus_sdk.resources.deployments import DeploymentService
         from noxus_sdk.resources.evaluations import EvaluationService
         from noxus_sdk.resources.files import FileService
         from noxus_sdk.resources.knowledge_bases import KnowledgeBaseService
         from noxus_sdk.resources.runs import RunService
+        from noxus_sdk.resources.sandboxes import SandboxService
+        from noxus_sdk.resources.tables import TableService
+        from noxus_sdk.resources.triggers import TriggerService
+        from noxus_sdk.resources.variables import VariableService
         from noxus_sdk.resources.workflows import WorkflowService
         from noxus_sdk.workflows import load_node_catalog, set_node_types
 
-        self.api_key = api_key
-        self.base_url = os.environ.get("NOXUS_BACKEND_URL", base_url)
-        self.extra_headers = extra_headers
+        # Explicit argument wins; NOXUS_BACKEND_URL only fills the default
+        # (via the Requester class attribute) when no base_url is passed.
+        super().__init__(
+            api_key,
+            extra_headers,
+            base_url=base_url,
+            transport=transport,
+            max_retries=max_retries,
+        )
 
         if load_nodes:
             # Raw response bytes feed a digest-memoized decode+parse — the
@@ -427,8 +502,34 @@ class Client(Requester):
         self.evaluations = EvaluationService(self)
         self.admin = AdminService(self, enabled=bool(not load_me))
         self.files = FileService(self)
+        self.sandboxes = SandboxService(self)
+        self.tables = TableService(self)
+        self.triggers = TriggerService(self)
+        self.deployments = DeploymentService(self)
+        self.variables = VariableService(self)
+        self.analytics = AnalyticsService(self)
+        self.insights = InsightService(self)
         if load_me:
             self.admin.enabled = self.admin.get_me().tenant_admin
+
+    @classmethod
+    def from_env(
+        cls,
+        *,
+        load_nodes: bool = True,
+        load_me: bool = True,
+    ) -> Client:
+        """Build a client from ``NOXUS_API_KEY`` / ``NOXUS_BACKEND_URL``."""
+        api_key = os.environ.get("NOXUS_API_KEY")
+        if not api_key:
+            raise ValueError("NOXUS_API_KEY is not set")
+        base_url = os.environ.get("NOXUS_BACKEND_URL", "https://backend.noxus.ai")
+        return cls(
+            api_key=api_key,
+            base_url=base_url,
+            load_nodes=load_nodes,
+            load_me=load_me,
+        )
 
     def get_nodes(self) -> list[dict]:
         return self.get("/v1/nodes")

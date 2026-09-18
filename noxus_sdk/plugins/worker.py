@@ -29,7 +29,11 @@ from typing import TYPE_CHECKING, cast
 from loguru import logger
 
 from noxus_sdk.nodes.schemas import ConfigResponse
-from noxus_sdk.plugins.context import FileHelper, RemoteExecutionContext
+from noxus_sdk.plugins.context import (
+    CredentialsHelper,
+    FileHelper,
+    RemoteExecutionContext,
+)
 from noxus_sdk.plugins.dispatch import ComponentNotFoundError, PluginDispatcher
 from noxus_sdk.plugins.jsonrpc import (
     COMPONENT_NOT_FOUND,
@@ -44,6 +48,12 @@ if TYPE_CHECKING:
 
     from noxus_sdk.files import File, SourceMetadata, SourceType
     from noxus_sdk.plugins.jsonrpc import Handler
+
+# Ceiling on one JSON-RPC line. Kept in lockstep with the sandbox manager's
+# STDIO_STREAM_LIMIT (agentsandbox/providers/base.py) and the platform's
+# WS_MAX_MESSAGE_BYTES (spotflow/plugins_runtime.py) — the smallest of the
+# three is what actually caps a file callback.
+STDIO_STREAM_LIMIT = 2**27
 
 
 class RpcFileHelper(FileHelper):
@@ -98,6 +108,34 @@ class RpcFileHelper(FileHelper):
         return result if isinstance(result, dict) else {}
 
 
+class RpcCredentialsHelper(CredentialsHelper):
+    """Pushes an updated credential payload back to the host as a callback.
+
+    Same channel and scoping model as :class:`RpcFileHelper`: the host
+    resolves the workspace and owning plugin from ``call_token`` and refuses
+    integrations the plugin does not declare."""
+
+    def __init__(self, peer: JsonRpcPeer, call_token: str | None = None) -> None:
+        self._peer = peer
+        self._call_token = call_token
+
+    async def update_integration_credentials(
+        self,
+        integration_name: str,
+        payload: dict,
+        credential_id: str | None = None,
+    ) -> None:
+        await self._peer.call(
+            "host.update_credentials",
+            {
+                "integration_name": integration_name,
+                "payload": payload,
+                "credential_id": credential_id,
+                "call_token": self._call_token,
+            },
+        )
+
+
 def build_handlers(
     dispatcher: PluginDispatcher, peer: JsonRpcPeer
 ) -> dict[str, Handler]:
@@ -111,6 +149,7 @@ def build_handlers(
     def _ctx(params: dict) -> RemoteExecutionContext:
         ctx = RemoteExecutionContext(**(params.get("ctx") or {}))
         ctx.set_file_helper(RpcFileHelper(peer, ctx.call_token))
+        ctx.set_credentials_helper(RpcCredentialsHelper(peer, ctx.call_token))
         return ctx
 
     async def manifest(_: dict) -> JsonValue:
@@ -160,6 +199,24 @@ def build_handlers(
         except ComponentNotFoundError as e:
             raise JsonRpcError(COMPONENT_NOT_FOUND, str(e)) from e
 
+    async def integration_device_auth_start(params: dict) -> JsonValue:
+        try:
+            result = await dispatcher.integration_device_auth_start(
+                params["integration_name"], _ctx(params)
+            )
+        except ComponentNotFoundError as e:
+            raise JsonRpcError(COMPONENT_NOT_FOUND, str(e)) from e
+        return result.model_dump(mode="json")
+
+    async def integration_device_auth_poll(params: dict) -> JsonValue:
+        try:
+            result = await dispatcher.integration_device_auth_poll(
+                params["integration_name"], _ctx(params), params["session_id"]
+            )
+        except ComponentNotFoundError as e:
+            raise JsonRpcError(COMPONENT_NOT_FOUND, str(e)) from e
+        return result.model_dump(mode="json")
+
     async def trigger_poll(params: dict) -> JsonValue:
         try:
             events, state = await dispatcher.trigger_poll(
@@ -195,6 +252,8 @@ def build_handlers(
         "node.config": node_config,
         "integration.config": integration_config,
         "integration.ready": integration_ready,
+        "integration.device_auth_start": integration_device_auth_start,
+        "integration.device_auth_poll": integration_device_auth_poll,
         "trigger.poll": trigger_poll,
         "datasource.fetch": datasource_fetch,
     }
@@ -216,9 +275,17 @@ def load_dispatcher(plugin_folder: Path) -> PluginDispatcher:
 
 
 async def _stdio_lines() -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
-    """Wrap process stdin/stdout as asyncio line streams."""
+    """Wrap process stdin/stdout as asyncio line streams.
+
+    The limit is explicit and must stay >= the sandbox manager's
+    STDIO_STREAM_LIMIT: a whole file crosses this channel base64-encoded on a
+    single line (host.get_content), and asyncio's 64 KiB default made
+    readline() raise on any file over ~48 KB. That raise unwinds peer.run(),
+    which fails the in-flight callback with "JSON-RPC peer transport closed"
+    and kills the worker for every other flow sharing it.
+    """
     loop = asyncio.get_event_loop()
-    reader = asyncio.StreamReader()
+    reader = asyncio.StreamReader(limit=STDIO_STREAM_LIMIT)
     await loop.connect_read_pipe(
         lambda: asyncio.StreamReaderProtocol(reader), sys.stdin
     )

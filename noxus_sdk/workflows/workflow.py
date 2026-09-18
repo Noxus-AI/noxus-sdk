@@ -442,6 +442,12 @@ class WorkflowDefinition(BaseModel):
     edges: list["Edge"] = []
     x: int = 0
     error_handler: uuid.UUID | None = None
+    # Which editor owns this flow. Modelled here so a read → mutate → write
+    # round-trip preserves it: the backend derives the DB column from this key,
+    # so dropping it on the way out silently converts a V2 flow to V1 and the
+    # editor then fails to render every V2 node (DEV-1975). Anything stored
+    # without it predates the column and is v1.
+    flow_version: str = "v1"
 
     @model_validator(mode="before")
     @classmethod
@@ -449,6 +455,13 @@ class WorkflowDefinition(BaseModel):
         if "definition" in values:
             values["nodes"] = values["definition"]["nodes"]
             values["edges"] = values["definition"]["edges"]
+            # The definition's own key is authoritative — it is what the engine,
+            # validation and archiving read. The top-level field (the DB column,
+            # served by the Workflow schema) is the fallback that repairs a
+            # definition some earlier round-trip already stripped.
+            definition_version = values["definition"].get("flow_version")
+            if definition_version is not None:
+                values["flow_version"] = definition_version
         return values
 
     def to_noxus(self) -> dict:
@@ -456,6 +469,7 @@ class WorkflowDefinition(BaseModel):
             "name": self.name,
             "type": self.type,
             "definition": {
+                "flow_version": self.flow_version,
                 "nodes": [n.model_dump() for n in self.nodes],
                 "edges": [e.model_dump() for e in self.edges],
             },

@@ -69,7 +69,8 @@ def validate(
 
     if manifest:
         typer.secho(
-            f"Plugin '{manifest.name}' v{manifest.version} validated successfully",
+            f"Plugin '{manifest.name}' v{manifest.version} validated successfully "
+            f"({manifest.execution_slots} execution slots)",
             fg="green",
         )
     else:

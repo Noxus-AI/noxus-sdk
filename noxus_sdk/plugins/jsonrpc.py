@@ -143,6 +143,7 @@ class JsonRpcPeer:
 
     async def run(self) -> None:
         """Read and dispatch messages until the transport reaches EOF."""
+        reason = "JSON-RPC peer transport closed"
         try:
             while True:
                 raw = await self._read_line()
@@ -162,8 +163,14 @@ class JsonRpcPeer:
                     self._spawn(self._handle_request(msg))
                 elif "id" in msg:
                     self._resolve_response(msg)
+        except Exception as e:
+            # Distinguish a read that *failed* from a clean EOF. An oversized
+            # line (a file callback past the stream limit) surfaces here, and
+            # reporting it as "closed" sent debugging after phantom timeouts.
+            reason = f"JSON-RPC peer transport failed: {e!r}"
+            raise
         finally:
-            self._fail_pending(ConnectionError("JSON-RPC peer transport closed"))
+            self._fail_pending(ConnectionError(reason))
 
     def _spawn(self, coro: Awaitable[None]) -> None:
         task = asyncio.ensure_future(coro)
