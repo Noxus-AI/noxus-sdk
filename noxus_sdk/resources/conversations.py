@@ -139,34 +139,6 @@ class ActionTool(ConversationTool):
     type: Literal["action"] = "action"
 
 
-class ChatflowTool(ConversationTool):
-    """Tool for chatflow execution"""
-
-    model_config = ConfigDict(extra="allow")
-    type: Literal["chatflow"] = "chatflow"
-
-
-class FlowTransitionTool(ConversationTool):
-    """Tool for flow transitions"""
-
-    model_config = ConfigDict(extra="allow")
-    type: Literal["flow_transition"] = "flow_transition"
-
-
-class ChatflowExtractionTool(ConversationTool):
-    """Tool for chatflow extraction"""
-
-    model_config = ConfigDict(extra="allow")
-    type: Literal["chatflow_extraction"] = "chatflow_extraction"
-
-
-class ChatflowTransitionTool(ConversationTool):
-    """Tool for chatflow transitions"""
-
-    model_config = ConfigDict(extra="allow")
-    type: Literal["chatflow_transition"] = "chatflow_transition"
-
-
 class SandboxTool(ConversationTool):
     """Tool that provides sandboxed file and shell operations"""
 
@@ -268,10 +240,6 @@ KnownToolSettings = Annotated[
     | CodeExecutionTool
     | AgentTool
     | ActionTool
-    | ChatflowTool
-    | FlowTransitionTool
-    | ChatflowExtractionTool
-    | ChatflowTransitionTool
     | SandboxTool
     | ScheduleTool
     | TodosTool
@@ -327,7 +295,6 @@ class ConversationSettings(BaseModel):
     persona: str | None = None
     tone: str | None = None
     extra_instructions: str | None = None
-    agent_flow_id: str | None = None
 
     @model_validator(mode="before")
     @classmethod
