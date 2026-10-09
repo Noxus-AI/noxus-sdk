@@ -6,6 +6,17 @@ from enum import Enum
 
 
 class NodeCategory(str, Enum):
+    CORE = "core"
+    FLOW = "flow"
+    DATA_OPERATIONS = "data_ops"
+    AI = "ai"
+    KNOWLEDGE = "knowledge"
+    TABLES = "tables"
+    WEB = "web"
+    FILES = "files"
+    CODE = "code"
+    SUBFLOWS = "subflows"
+    PLUGINS = "plugins"
     IO = "io"
     SOURCES = "sources"
     DATA = "data"
@@ -17,7 +28,6 @@ class NodeCategory(str, Enum):
     AGENTS = "agents"
     OTHER = "other"
     ADMIN = "admin"
-    CHAT = "agent_flow"
 
 
 class DataType(str, Enum):

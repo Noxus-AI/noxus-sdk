@@ -1,7 +1,7 @@
-# Workflows, Runs & Agent-flows
+# Workflows & Runs
 
 `client.workflows` builds and versions flows; `client.runs` executes them and
-reads results; `client.agentflows` is the same shape for agent-flow definitions.
+reads results.
 
 ## Building a workflow
 
@@ -128,9 +128,3 @@ for event in run.stream(etag=None):       # live RunEvents
 
 `wait(output_only=True)` returns just the output dict; otherwise it returns the
 refreshed `Run`. Streaming yields `RunEvent`s as the run progresses.
-
-## Agent-flows
-
-`client.agentflows` mirrors `client.workflows` for agent-flow definitions:
-`list`, `get`, `save`, `update(..., force=False)`, `delete` (+ async twins),
-operating on `AgentFlowDefinition`.

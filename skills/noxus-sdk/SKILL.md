@@ -16,7 +16,7 @@ description: >
 The public Python SDK for the Noxus AI backend. One `Client`, then everything
 hangs off it as a resource service (`client.workflows`, `client.agents`, …).
 Every method has a **sync** form and an **async** form prefixed with `a`
-(`list` / `alist`, `create` / `acreate`). This skill documents v0.6.0.
+(`list` / `alist`, `create` / `acreate`). This skill documents v0.7.0.
 
 > This is the **customer-facing** SDK (package `noxus_sdk`, repo `noxus-sdk/`).
 > Do not confuse it with the internal `noxus/` core library. When editing the
@@ -28,7 +28,6 @@ Every method has a **sync** form and an **async** form prefixed with `a`
 |---|---|---|
 | `workflows` | Build / version / export flows | [WORKFLOWS.md](WORKFLOWS.md) |
 | `runs` | Execute flows, stream, search runs | [WORKFLOWS.md](WORKFLOWS.md) |
-| `agentflows` | Agent-flow definitions | [WORKFLOWS.md](WORKFLOWS.md) |
 | `agents` | Agents (co-workers): CRUD, versions, publish | [AGENTS.md](AGENTS.md) |
 | `conversations` | Chat with an agent, stream messages | [AGENTS.md](AGENTS.md) |
 | `insights` | Agent insight dashboards (CSAT, topics…) | [AGENTS.md](AGENTS.md) |
