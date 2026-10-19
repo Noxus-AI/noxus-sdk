@@ -17,7 +17,6 @@ CONFIGURATION_TAB: Literal["Configuration", "Safety", "Human", "Model"] = (
 )
 MODEL_TAB: Literal["Configuration", "Safety", "Human", "Model"] = "Model"
 SAFETY_TAB: Literal["Configuration", "Safety", "Human", "Model"] = "Safety"
-HUMAN_TAB: Literal["Configuration", "Safety", "Human", "Model"] = "Human"
 
 
 def Parameter(  # noqa: N802 - Syntax sugar
