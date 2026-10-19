@@ -68,9 +68,7 @@ class AdminService(BaseService[Workspace]):
             raise ValueError(
                 "Admin service is disabled because client was not initialized with an admin API key",
             )
-        response = await self.client.apget(
-            "/v1/admin/groups",
-        )
+        response = await self.client.aget("/v1/admin/groups")
         return [Workspace(client=self.client, **group) for group in response]
 
     def list_workspaces(self) -> list[Workspace]:
