@@ -17,6 +17,10 @@ import httpx
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from noxus_sdk.plugins.exceptions import (
+    InvalidPluginArchiveError,
+    ManifestNotFoundError,
+)
 from noxus_sdk.plugins.interfaces import PluginSource
 from noxus_sdk.plugins.manifest import PluginManifest
 
@@ -101,7 +105,10 @@ class UploadPluginSource(PluginSource, BaseModel):
             elif self.filename.lower().endswith((".tar.gz", ".tgz", ".tar")):
                 await self._extract_archive(temp_file_path, output_dir, "tar")
             else:
-                raise ValueError(f"Unsupported file format: {self.filename}")
+                raise InvalidPluginArchiveError(
+                    f"Unsupported plugin file format: '{self.filename}'. "
+                    "Upload a .zip, .tar, .tar.gz or .tgz archive."
+                )
 
             return output_dir
 
@@ -148,10 +155,15 @@ class UploadPluginSource(PluginSource, BaseModel):
             elif archive_type == "tar":
                 await self._extract_tar_archive(source_path, target_path)
             else:
-                raise ValueError(f"Unsupported archive type: {archive_type}")
+                raise InvalidPluginArchiveError(
+                    f"Unsupported archive type: {archive_type}"
+                )
 
         except (zipfile.BadZipFile, tarfile.TarError) as e:
-            raise ValueError(f"Invalid {archive_type} file: {source_path}") from e
+            # Report the user's filename, not the server-side temp path.
+            raise InvalidPluginArchiveError(
+                f"'{self.filename}' is not a valid {archive_type} archive"
+            ) from e
 
     async def _extract_zip_archive(self, source_path: Path, target_path: Path) -> None:
         """Securely extract ZIP archive with path validation"""
@@ -295,7 +307,7 @@ class UploadPluginSource(PluginSource, BaseModel):
                     if sub_manifest.exists():
                         logger.error(f"Found manifest.json in subdirectory: {subdir}")
 
-                raise FileNotFoundError("manifest.json not found in plugin")
+                raise ManifestNotFoundError("manifest.json not found in plugin")
 
             # Load and parse manifest
             async with aiofiles.open(manifest_file, encoding="utf-8") as f:

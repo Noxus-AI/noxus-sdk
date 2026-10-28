@@ -239,13 +239,33 @@ class Requester:
             params=params,
         )
 
+    async def aput(
+        self,
+        url: str,
+        body: Any,  # noqa: ANN401
+        headers: dict | None = None,
+        timeout: int | None = None,
+        params: dict | None = None,
+    ) -> dict:
+        return await self.arequest(
+            "PUT",
+            url,
+            json=body,
+            headers=headers,
+            timeout=timeout,
+            params=params,
+        )
+
     async def adelete(
         self,
         url: str,
         headers: dict | None = None,
         timeout: int | None = None,
+        params: dict | None = None,
     ) -> dict:
-        return await self.arequest("DELETE", url, headers=headers, timeout=timeout)
+        return await self.arequest(
+            "DELETE", url, headers=headers, timeout=timeout, params=params
+        )
 
     def _request(
         self,
@@ -434,13 +454,33 @@ class Requester:
             timeout=timeout,
         )
 
+    def put(
+        self,
+        url: str,
+        body: Any,  # noqa: ANN401
+        headers: dict | None = None,
+        timeout: int | None = None,
+        params: dict | None = None,
+    ) -> Any:  # noqa: ANN401
+        return self.request(
+            "PUT",
+            url,
+            json=body,
+            headers=headers,
+            timeout=timeout,
+            params=params,
+        )
+
     def delete(
         self,
         url: str,
         headers: dict | None = None,
         timeout: int | None = None,
+        params: dict | None = None,
     ) -> Any:  # noqa: ANN401
-        return self.request("DELETE", url, headers=headers, timeout=timeout)
+        return self.request(
+            "DELETE", url, headers=headers, timeout=timeout, params=params
+        )
 
 
 class Client(Requester):
@@ -456,7 +496,6 @@ class Client(Requester):
         max_retries: int = DEFAULT_MAX_RETRIES,
     ) -> None:
         from noxus_sdk.resources.admin import AdminService
-        from noxus_sdk.resources.agentflows import AgentFlowService
         from noxus_sdk.resources.analytics import AnalyticsService
         from noxus_sdk.resources.insights import InsightService
         from noxus_sdk.resources.assistants import AgentService
@@ -494,7 +533,6 @@ class Client(Requester):
             self.nodes = []
 
         self.workflows = WorkflowService(self)
-        self.agentflows = AgentFlowService(self)
         self.agents = AgentService(self)
         self.conversations = ConversationService(self)
         self.knowledge_bases = KnowledgeBaseService(self)
