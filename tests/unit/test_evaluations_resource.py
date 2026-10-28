@@ -90,6 +90,8 @@ async def test_acreate_evaluator_sends_body() -> None:
             "type": "agent_llm_judge",
             "name": "judge",
             "config": {"model": ["preset:cost"]},
+            "test_case_id": None,
+            "expected_output": None,
         },
     )
     assert evaluator.type == "agent_llm_judge"

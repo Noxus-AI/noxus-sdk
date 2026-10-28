@@ -95,12 +95,26 @@ class Agent(BaseResource):
 
 
 class AgentService(BaseService[Agent]):
-    async def alist(self) -> list[Agent]:
-        results = await self.client.apget("/v1/agents")
+    async def alist(
+        self, page: int = 1, page_size: int = 10, query: str | None = None
+    ) -> list[Agent]:
+        results = await self.client.apget(
+            "/v1/agents",
+            params={"query": query} if query else None,
+            page=page,
+            page_size=page_size,
+        )
         return [Agent(client=self.client, **result) for result in results]
 
-    def list(self) -> list[Agent]:
-        results = self.client.pget("/v1/agents")
+    def list(
+        self, page: int = 1, page_size: int = 10, query: str | None = None
+    ) -> list[Agent]:
+        results = self.client.pget(
+            "/v1/agents",
+            params={"query": query} if query else None,
+            page=page,
+            page_size=page_size,
+        )
         return [Agent(client=self.client, **result) for result in results]
 
     def create(self, name: str, settings: AgentSettings) -> Agent:
