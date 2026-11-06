@@ -32,6 +32,7 @@ from noxus_sdk.nodes.schemas import ConfigResponse
 from noxus_sdk.plugins.context import (
     CredentialsHelper,
     FileHelper,
+    LLMHelper,
     RemoteExecutionContext,
 )
 from noxus_sdk.plugins.dispatch import ComponentNotFoundError, PluginDispatcher
@@ -136,6 +137,42 @@ class RpcCredentialsHelper(CredentialsHelper):
         )
 
 
+class RpcLLMHelper(LLMHelper):
+    """Runs a plugin's LLM completion on the host as a callback.
+
+    The host resolves ``call_token`` to the run that dispatched this call and
+    completes with that run's workspace, providers and billing. It refuses
+    when the call did not come from a running node (config, trigger polls)."""
+
+    def __init__(self, peer: JsonRpcPeer, call_token: str | None = None) -> None:
+        self._peer = peer
+        self._call_token = call_token
+
+    async def complete(
+        self,
+        models: list[str],
+        prompt: str,
+        system_prompt: str,
+        json_schema: dict | None,
+        schema_name: str | None,
+    ) -> str | dict:
+        result = await self._peer.call(
+            "host.complete",
+            {
+                "models": cast("JsonValue", models),
+                "prompt": prompt,
+                "system_prompt": system_prompt,
+                "json_schema": cast("JsonValue", json_schema),
+                "schema_name": schema_name,
+                "call_token": self._call_token,
+            },
+        )
+        output = result.get("output") if isinstance(result, dict) else None
+        if isinstance(output, (str, dict)):
+            return output
+        raise RuntimeError("host.complete returned no output")
+
+
 def build_handlers(
     dispatcher: PluginDispatcher, peer: JsonRpcPeer
 ) -> dict[str, Handler]:
@@ -150,6 +187,7 @@ def build_handlers(
         ctx = RemoteExecutionContext(**(params.get("ctx") or {}))
         ctx.set_file_helper(RpcFileHelper(peer, ctx.call_token))
         ctx.set_credentials_helper(RpcCredentialsHelper(peer, ctx.call_token))
+        ctx.set_llm_helper(RpcLLMHelper(peer, ctx.call_token))
         return ctx
 
     async def manifest(_: dict) -> JsonValue:

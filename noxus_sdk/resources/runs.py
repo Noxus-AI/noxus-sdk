@@ -16,9 +16,18 @@ if TYPE_CHECKING:
 # Which part of a run `RunService.search` looks in.
 SearchIn = Literal["input", "output", "other", "run_id"]
 
+_FINISHED_STATUSES = ("failed", "completed", "awaiting_human_feedback")
+
 
 class RunFailureError(Exception):
-    pass
+    """A run finished as failed, with the reason the run recorded."""
+
+    def __init__(self, status: str, meta: dict | None = None) -> None:
+        meta = meta or {}
+        self.error: str | None = meta.get("error")
+        self.error_code: str | None = meta.get("error_code")
+        self.error_type: str | None = meta.get("error_type")
+        super().__init__(f"{status}: {self.error}" if self.error else status)
 
 
 class RunDeletion(BaseModel):
@@ -70,6 +79,22 @@ class Run(BaseResource):
     created_at: str
     finished_at: str | None = None
     output: dict | None = None
+
+    # The reason is a courtesy: reading it must never hide the failure itself.
+    # The workflow-scoped read that refresh() polls carries no meta.
+    def _failure(self) -> RunFailureError:
+        try:
+            meta = self.client.get(f"/v1/runs/{self.id}").get("meta")
+        except Exception:
+            meta = None
+        return RunFailureError(self.status, meta)
+
+    async def _afailure(self) -> RunFailureError:
+        try:
+            meta = (await self.client.aget(f"/v1/runs/{self.id}")).get("meta")
+        except Exception:
+            meta = None
+        return RunFailureError(self.status, meta)
 
     def refresh(self) -> Run:
         response = self.client.get(f"/v1/workflows/{self.workflow_id}/runs/{self.id}")
@@ -159,9 +184,9 @@ class Run(BaseResource):
         *,
         output_only: bool = False,
     ) -> Run | dict | None:
-        if self.status in ("failed", "completed", "awaiting_human_feedback"):
+        if self.status in _FINISHED_STATUSES:
             if self.status == "failed":
-                raise RunFailureError(self.status)
+                raise self._failure()
             return self.output if output_only else self
 
         # Try SSE stream first — no polling, instant notification
@@ -171,15 +196,16 @@ class Run(BaseResource):
                     break
         except Exception:
             # Fall back to polling if SSE fails (e.g. older server)
-            while self.status not in ("failed", "completed", "awaiting_human_feedback"):
-                time.sleep(interval)
-                self.refresh()
+            pass
 
-        # Refresh to get final output/status
+        # The stream can end before the final status and output are persisted.
         self.refresh()
+        while self.status not in _FINISHED_STATUSES:
+            time.sleep(interval)
+            self.refresh()
 
         if self.status == "failed":
-            raise RunFailureError(self.status)
+            raise self._failure()
 
         if output_only:
             return self.output
@@ -191,9 +217,9 @@ class Run(BaseResource):
         *,
         output_only: bool = False,
     ) -> Run | dict | None:
-        if self.status in ("failed", "completed", "awaiting_human_feedback"):
+        if self.status in _FINISHED_STATUSES:
             if self.status == "failed":
-                raise RunFailureError(self.status)
+                raise await self._afailure()
             return self.output if output_only else self
 
         # Try SSE stream first — no polling, instant notification
@@ -203,15 +229,16 @@ class Run(BaseResource):
                     break
         except Exception:
             # Fall back to polling if SSE fails (e.g. older server)
-            while self.status not in ("failed", "completed", "awaiting_human_feedback"):
-                await asyncio.sleep(interval)
-                await self.arefresh()
+            pass
 
-        # Refresh to get final output/status
+        # The stream can end before the final status and output are persisted.
         await self.arefresh()
+        while self.status not in _FINISHED_STATUSES:
+            await asyncio.sleep(interval)
+            await self.arefresh()
 
         if self.status == "failed":
-            raise RunFailureError(self.status)
+            raise await self._afailure()
 
         if output_only:
             return self.output

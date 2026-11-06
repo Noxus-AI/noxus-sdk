@@ -44,7 +44,6 @@ _BACKEND_EXTRA_TOOL_FIELDS = {
     "icon": "globe",
     "bg_color": "#E8F5E9",
     "icon_color": "#4CAF50",
-    "chatflow_usable": True,
     "deprecated": False,
 }
 
@@ -83,7 +82,6 @@ _BACKEND_EXTRA_SETTINGS_FIELDS = {
     "actions": [],
     "mcp_servers": [],
     "subagents": [],
-    "chatflow_tools": [],
 }
 
 
@@ -109,7 +107,6 @@ def _full_backend_settings(**overrides) -> dict:
         "persona": None,
         "tone": None,
         "extra_instructions": None,
-        "agent_flow_id": None,
         **_BACKEND_EXTRA_SETTINGS_FIELDS,
         "tools": [
             _full_backend_tool("web_research"),
@@ -370,15 +367,6 @@ class TestConversationSettingsEdgeCases:
         assert s.temperature == 0.7
         assert not hasattr(s, "top_p")
 
-    def test_agent_flow_id(self):
-        s = ConversationSettings(
-            model=["gpt-4o"],
-            temperature=0.7,
-            tools=[],
-            agent_flow_id="flow-123",
-        )
-        assert s.agent_flow_id == "flow-123"
-
 
 # ════════════════════════════════════════════════════════════════════
 #  5. Tool edge cases
@@ -590,11 +578,3 @@ class TestMissingFields:
         assert s.persona is None
         assert s.tone is None
         assert s.extra_instructions is None
-
-    def test_settings_no_agent_flow_id(self):
-        settings = _full_backend_settings()
-        # agent_flow_id not present at all
-        if "agent_flow_id" in settings:
-            del settings["agent_flow_id"]
-        s = ConversationSettings(**settings)
-        assert s.agent_flow_id is None

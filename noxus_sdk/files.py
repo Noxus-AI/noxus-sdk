@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import mimetypes
 import os
+import unicodedata
 import uuid
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional
@@ -162,21 +163,94 @@ class EmptyFile(File):
         return b" "
 
 
-async def persist_files_locally(
+_FALLBACK_NAME = "file"
+_MAX_NAME_BYTES = 255
+_MAX_EXTENSION_BYTES = 32
+# Bidi embeddings, overrides and isolates change how a name is displayed:
+# "invoice<U+202E>gpj.exe" reads as "invoiceexe.jpg".
+_BIDI_CONTROLS = frozenset(
+    chr(code) for code in [*range(0x202A, 0x202F), *range(0x2066, 0x206A)]
+)
+
+
+def _kept_in_file_name(ch: str) -> bool:
+    return unicodedata.category(ch) != "Cc" and ch not in _BIDI_CONTROLS
+
+
+def safe_file_name(name: str) -> str:
+    """``name`` reduced to one path segment, safe to create inside a folder.
+
+    File names come from uploads and email attachments, so a separator,
+    ``..`` or an absolute path must never reach the filesystem.
+    """
+    base = name.replace("\\", "/").rsplit("/", 1)[-1]
+    base = "".join(ch for ch in base if _kept_in_file_name(ch)).strip()
+    if base in ("", ".", ".."):
+        return _FALLBACK_NAME
+    if len(base.encode()) <= _MAX_NAME_BYTES:
+        return base
+    stem, extension = os.path.splitext(base)
+    if len(extension.encode()) > _MAX_EXTENSION_BYTES:
+        stem, extension = base, ""
+    budget = _MAX_NAME_BYTES - len(extension.encode())
+    return stem.encode()[:budget].decode(errors="ignore") + extension
+
+
+def _numbered_name(stem: str, extension: str, copy: int) -> str:
+    if len(extension.encode()) > _MAX_EXTENSION_BYTES:
+        stem, extension = stem + extension, ""
+    suffix = f" ({copy}){extension}"
+    head = stem.encode()[: _MAX_NAME_BYTES - len(suffix.encode())]
+    return head.decode(errors="ignore") + suffix
+
+
+def unique_local_path(folder: str, name: str) -> str:
+    """A path in ``folder`` for ``name`` that nothing occupies yet.
+
+    Two files whose names reduce to the same safe name get ``report.pdf`` and
+    ``report (1).pdf`` rather than one overwriting the other.
+    """
+    root = os.path.realpath(folder)
+    base = safe_file_name(name)
+    stem, extension = os.path.splitext(base)
+    candidate = os.path.join(root, base)
+    copy = 0
+    while os.path.lexists(candidate):
+        copy += 1
+        candidate = os.path.join(root, _numbered_name(stem, extension, copy))
+    if os.path.dirname(os.path.realpath(candidate)) != root:
+        raise ValueError(f"File name {name!r} resolves outside {folder}")
+    return candidate
+
+
+async def persist_files(
     ctx: RemoteExecutionContext, files: list[File], path: str | None = None
-) -> str:
-    """Download ``files`` into a local directory and return that directory path.
+) -> list[str]:
+    """Download ``files`` into a local directory and return each file's path.
 
     Each file's bytes are fetched via the host ``get_content`` callback and
-    written under ``path`` using the file's ``name``. When ``path`` is omitted a
-    fresh directory under ``/tmp`` is created. The directory lives on the
-    plugin's own sandbox filesystem — use this when a library needs real file
-    paths on disk rather than :class:`File` references.
+    written under ``path`` (a fresh directory under ``/tmp`` when omitted) as
+    :func:`safe_file_name` of its ``name``; same-named files stay distinct. The
+    directory lives on the plugin's own sandbox filesystem: use this when a
+    library needs real file paths on disk rather than :class:`File` references.
     """
     if not path:
         path = os.path.join("/tmp", uuid.uuid4().hex)
     os.makedirs(path, exist_ok=True)
+    paths = []
     for f in files:
-        with open(os.path.join(path, f.name), "wb") as fp:
+        local_path = unique_local_path(path, f.name)
+        with open(local_path, "xb") as fp:
             fp.write(await f.get_content(ctx))
+        paths.append(local_path)
+    return paths
+
+
+async def persist_files_locally(
+    ctx: RemoteExecutionContext, files: list[File], path: str | None = None
+) -> str:
+    """Like :func:`persist_files`, returning the directory instead of the paths."""
+    if not path:
+        path = os.path.join("/tmp", uuid.uuid4().hex)
+    await persist_files(ctx, files, path)
     return path
