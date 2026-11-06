@@ -33,7 +33,9 @@ class Evaluator(BaseResource):
     name: str
     display_name: str | None = None
     description: str | None = None
+    test_case_id: UUID | None = None
     config: JsonDict = {}
+    expected_output: JsonDict | None = None
     created_at: datetime | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="allow")
@@ -153,17 +155,27 @@ class EvaluationService(BaseService[TestSuite]):
         return TestSuite(client=self.client, **result)
 
     # ---- evaluators ----------------------------------------------------------
-    def list_evaluators(self, group_id: str, test_suite_id: str) -> list[Evaluator]:
+    @staticmethod
+    def _evaluators_path(
+        group_id: str, test_suite_id: str, test_case_id: str | None
+    ) -> str:
+        path = f"/v1/groups/{group_id}/test-suites/{test_suite_id}/evaluators"
+        return f"{path}?test_case_id={test_case_id}" if test_case_id else path
+
+    def list_evaluators(
+        self, group_id: str, test_suite_id: str, test_case_id: str | None = None
+    ) -> list[Evaluator]:
+        """A suite's evaluators, or with ``test_case_id`` the checks of one agent test."""
         results = self.client.get(
-            f"/v1/groups/{group_id}/test-suites/{test_suite_id}/evaluators"
+            self._evaluators_path(group_id, test_suite_id, test_case_id)
         )
         return [Evaluator(client=self.client, **r) for r in results]
 
     async def alist_evaluators(
-        self, group_id: str, test_suite_id: str
+        self, group_id: str, test_suite_id: str, test_case_id: str | None = None
     ) -> list[Evaluator]:
         results = await self.client.aget(
-            f"/v1/groups/{group_id}/test-suites/{test_suite_id}/evaluators"
+            self._evaluators_path(group_id, test_suite_id, test_case_id)
         )
         return [Evaluator(client=self.client, **r) for r in results]
 
@@ -174,10 +186,19 @@ class EvaluationService(BaseService[TestSuite]):
         type: str,
         name: str,
         config: JsonDict | None = None,
+        test_case_id: str | None = None,
+        expected_output: JsonDict | None = None,
     ) -> Evaluator:
+        """On an agent suite, a check belongs to one test and holds its expected value."""
         result = self.client.post(
             f"/v1/groups/{group_id}/test-suites/{test_suite_id}/evaluators",
-            {"type": type, "name": name, "config": config or {}},
+            {
+                "type": type,
+                "name": name,
+                "config": config or {},
+                "test_case_id": test_case_id,
+                "expected_output": expected_output,
+            },
         )
         return Evaluator(client=self.client, **result)
 
@@ -188,10 +209,18 @@ class EvaluationService(BaseService[TestSuite]):
         type: str,
         name: str,
         config: JsonDict | None = None,
+        test_case_id: str | None = None,
+        expected_output: JsonDict | None = None,
     ) -> Evaluator:
         result = await self.client.apost(
             f"/v1/groups/{group_id}/test-suites/{test_suite_id}/evaluators",
-            {"type": type, "name": name, "config": config or {}},
+            {
+                "type": type,
+                "name": name,
+                "config": config or {},
+                "test_case_id": test_case_id,
+                "expected_output": expected_output,
+            },
         )
         return Evaluator(client=self.client, **result)
 
@@ -227,10 +256,17 @@ class EvaluationService(BaseService[TestSuite]):
         name: str,
         inputs: JsonDict,
         expected_outputs: JsonDict | None = None,
+        evaluators: list[JsonDict] | None = None,
     ) -> TestCase:
+        """An agent test takes its checks in ``evaluators`` (type, name, expected_output)."""
         result = self.client.post(
             f"/v1/groups/{group_id}/test-suites/{test_suite_id}/test-cases",
-            {"name": name, "inputs": inputs, "expected_outputs": expected_outputs},
+            {
+                "name": name,
+                "inputs": inputs,
+                "expected_outputs": expected_outputs,
+                "evaluators": evaluators or [],
+            },
         )
         return TestCase(client=self.client, **result)
 
@@ -241,10 +277,16 @@ class EvaluationService(BaseService[TestSuite]):
         name: str,
         inputs: JsonDict,
         expected_outputs: JsonDict | None = None,
+        evaluators: list[JsonDict] | None = None,
     ) -> TestCase:
         result = await self.client.apost(
             f"/v1/groups/{group_id}/test-suites/{test_suite_id}/test-cases",
-            {"name": name, "inputs": inputs, "expected_outputs": expected_outputs},
+            {
+                "name": name,
+                "inputs": inputs,
+                "expected_outputs": expected_outputs,
+                "evaluators": evaluators or [],
+            },
         )
         return TestCase(client=self.client, **result)
 

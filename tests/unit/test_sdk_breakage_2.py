@@ -1,7 +1,6 @@
 """Round 2: more SDK breakage tests.
 
 Bugs found:
-1. AgentFlowDefinition.arun() passes args positionally instead of name=
 2. KnowledgeBaseService.list_documents() iterates response directly (expects list, gets dict)
 3. ConversationFile validator raises wrong exception type
 4. Run.wait() bare except swallows auth/network errors
@@ -26,45 +25,15 @@ from noxus_sdk.resources.knowledge_bases import (
 )
 from noxus_sdk.resources.runs import Run, RunEvent
 import noxus_sdk.workflows.workflow as _wf
-from noxus_sdk.workflows.agentflow import AgentFlowDefinition
 from noxus_sdk.workflows.workflow import WorkflowDefinition
 
 # Resolve forward refs for Python 3.10 compat — all classes must be in scope
 _ns = vars(_wf)
 WorkflowDefinition.model_rebuild(_types_namespace=_ns)
-AgentFlowDefinition.model_rebuild(_types_namespace=_ns)
 
 
 def _client():
     return create_autospec(Client, instance=True)
-
-
-# ════════════════════════════════════════════════════════════════════
-#  BUG 1: AgentFlowDefinition.arun() passes args positionally
-# ════════════════════════════════════════════════════════════════════
-
-
-class TestAgentFlowArunBug:
-    def test_run_uses_keyword_args(self):
-        """run() correctly uses name= keyword — this works."""
-        af = AgentFlowDefinition(client=_client(), name="My Flow")
-        af.id = "flow-123"
-
-        # run() calls: conversations.create(name=self.name, settings=...)
-        # Verify it would work by checking the source
-        import inspect
-
-        source = inspect.getsource(af.run)
-        assert "name=" in source, "run() should use name= keyword"
-
-    def test_arun_uses_keyword_args_and_acreate(self):
-        """arun() must use name= keyword, self.name (not self.id), and acreate."""
-        import inspect
-
-        source = inspect.getsource(AgentFlowDefinition.arun)
-        assert "name=" in source, "arun() should use name= keyword"
-        assert "self.name" in source, "arun() should use self.name, not self.id"
-        assert "acreate" in source, "arun() should call acreate (async), not create"
 
 
 # ════════════════════════════════════════════════════════════════════

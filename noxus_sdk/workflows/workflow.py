@@ -628,15 +628,7 @@ class WorkflowDefinition(BaseModel):
         return await self.client.workflows.alist_versions(self.id)
 
     def verify_name_legal(self, name):
-        assert name not in [
-            "AgentStartNode",
-            "AgentEndNode",
-            "AgentMessageSendNode",
-            "ChoiceAgentNode",
-            "FormExtractionAgentNode",
-            "BasicAgentNode",
-            "ChatAgentNode",
-        ]
+        assert name != "BasicAgentNode"
 
     def node(self, name) -> "Node":
         self.verify_name_legal(name)

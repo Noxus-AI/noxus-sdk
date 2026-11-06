@@ -5,6 +5,7 @@ from noxus_sdk.plugins.context import RemoteExecutionContext
 from noxus_sdk.plugins.exceptions import (
     GitAuthenticationError,
     GitRepositoryNotFoundError,
+    InvalidPluginArchiveError,
     ManifestNotFoundError,
     PluginSourceError,
 )
@@ -22,6 +23,7 @@ __all__ = [
     "BasePlugin",
     "GitAuthenticationError",
     "GitPluginSource",
+    "InvalidPluginArchiveError",
     "GitRepositoryNotFoundError",
     "LocalPluginSource",
     "ManifestNotFoundError",

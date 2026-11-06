@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import tempfile
 import time
 from pathlib import Path
 from typing import Literal
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import quote, urlparse, urlunparse
 
 import aiofiles
 import git
@@ -27,6 +28,24 @@ from noxus_sdk.utils.github import get_file_content, is_github_repo
 # Constants
 MANIFEST_FILENAME = "manifest.json"
 DEFAULT_BRANCH = "main"
+GIT_ENV = {"GIT_TERMINAL_PROMPT": "0"}
+_CREDENTIALS_IN_URL = re.compile(r"://[^/@\s]+@")
+
+
+def _token_username(hostname: str, token: str) -> str:
+    if hostname.endswith("gitlab.com"):
+        return "oauth2"
+    if hostname.endswith("bitbucket.org"):
+        return (
+            "x-bitbucket-api-token-auth"
+            if token.startswith("ATATT")
+            else "x-token-auth"
+        )
+    return "x-access-token"
+
+
+def redact_credentials(text: str) -> str:
+    return _CREDENTIALS_IN_URL.sub("://***@", text)
 
 
 class GitPluginSource(PluginSource, BaseModel):
@@ -72,16 +91,16 @@ class GitPluginSource(PluginSource, BaseModel):
             return self.repo_url
 
         parsed = urlparse(self.repo_url)
+        hostname = parsed.hostname or ""
 
         if self.token:
-            # Token auth: https://token@github.com/user/repo
-            netloc = f"{self.token}@{parsed.hostname}"
+            username, password = _token_username(hostname, self.token), self.token
         elif self.username and self.password:
-            # Username + password/token: https://user:pass@github.com/user/repo
-            netloc = f"{self.username}:{self.password}@{parsed.hostname}"
+            username, password = self.username, self.password
         else:
             return self.repo_url
 
+        netloc = f"{quote(username, safe='')}:{quote(password, safe='')}@{hostname}"
         if parsed.port:
             netloc = f"{netloc}:{parsed.port}"
 
@@ -93,14 +112,16 @@ class GitPluginSource(PluginSource, BaseModel):
 
     def _handle_git_error(self, error: git.GitCommandError) -> Exception:
         """Convert git errors to user-friendly exceptions."""
-        stderr = str(error.stderr).lower() if error.stderr else ""
-        stdout = str(error.stdout).lower() if error.stdout else ""
-        error_text = f"{stderr} {stdout}"
+        stderr = redact_credentials(str(error.stderr)) if error.stderr else ""
+        stdout = redact_credentials(str(error.stdout)) if error.stdout else ""
+        error_text = f"{stderr} {stdout}".lower()
 
         # Authentication errors (private repos, invalid credentials)
         auth_patterns = [
             "authentication",
             "could not read username",
+            "could not read password",
+            "terminal prompts disabled",
             "invalid credentials",
             "permission denied",
             "access denied",
@@ -134,7 +155,7 @@ class GitPluginSource(PluginSource, BaseModel):
 
         # Fallback with original error for debugging
         return GitRepositoryNotFoundError(
-            f"Failed to clone repository {self.repo_url}: {error.stderr or error}"
+            f"Failed to clone repository {self.repo_url}: {stderr or redact_credentials(str(error))}"
         )
 
     async def _get_manifest_via_api(self) -> PluginManifest:
@@ -169,6 +190,7 @@ class GitPluginSource(PluginSource, BaseModel):
                 branch=self.branch,
                 depth=1,
                 no_checkout=True,
+                env=GIT_ENV,
                 multi_options=[
                     "--filter=blob:none",  # Skip blob downloads initially
                     "--sparse",  # Enable sparse checkout
@@ -204,6 +226,7 @@ class GitPluginSource(PluginSource, BaseModel):
                 temp_path,
                 branch=self.branch,
                 depth=1,
+                env=GIT_ENV,
                 multi_options=["--filter=blob:none"],  # Defer blob downloads
             )
         except git.GitCommandError as e:

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING, Protocol
+import json
+from collections.abc import Sequence
+from typing import Any, TYPE_CHECKING, Protocol, TypeVar, overload
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
@@ -32,6 +34,20 @@ class CredentialsHelper(Protocol):
     ) -> None: ...
 
 
+ResponseT = TypeVar("ResponseT", bound=BaseModel)
+
+
+class LLMHelper(Protocol):
+    async def complete(
+        self,
+        models: list[str],
+        prompt: str,
+        system_prompt: str,
+        json_schema: dict | None,
+        schema_name: str | None,
+    ) -> str | dict: ...
+
+
 class RemoteExecutionContext(BaseModel):
     plugin_config: dict = {}
     integration_credentials: dict[str, dict] = {}
@@ -45,6 +61,7 @@ class RemoteExecutionContext(BaseModel):
     call_token: str | None = None
     _file_helper: FileHelper | None = None
     _credentials_helper: CredentialsHelper | None = None
+    _llm_helper: LLMHelper | None = None
 
     def get_integration_credentials(self, integration_name: str) -> dict:
         return (
@@ -82,6 +99,59 @@ class RemoteExecutionContext(BaseModel):
 
     def set_credentials_helper(self, helper: CredentialsHelper) -> None:
         self._credentials_helper = helper
+
+    def set_llm_helper(self, helper: LLMHelper) -> None:
+        self._llm_helper = helper
+
+    @overload
+    async def acomplete(
+        self,
+        models: Sequence[str],
+        prompt: str,
+        *,
+        system_prompt: str = "",
+        response_format: None = None,
+    ) -> str: ...
+
+    @overload
+    async def acomplete(
+        self,
+        models: Sequence[str],
+        prompt: str,
+        *,
+        system_prompt: str = "",
+        response_format: type[ResponseT],
+    ) -> ResponseT: ...
+
+    async def acomplete(
+        self,
+        models: Sequence[str],
+        prompt: str,
+        *,
+        system_prompt: str = "",
+        response_format: type[ResponseT] | None = None,
+    ) -> str | ResponseT:
+        """Run one LLM completion on the platform, as the platform's own nodes do.
+
+        ``models`` are platform model names or presets (``"preset:cost"``). The
+        call runs host-side with the calling workspace's providers, billing and
+        constraints, so the plugin never holds a provider key. Only available
+        while the platform is running one of this plugin's nodes."""
+        if self._llm_helper is None:
+            raise RuntimeError(
+                "LLM completions are only available while the platform runs "
+                "this plugin's node in a flow"
+            )
+        result = await self._llm_helper.complete(
+            list(models),
+            prompt,
+            system_prompt,
+            response_format.model_json_schema() if response_format else None,
+            response_format.__name__ if response_format else None,
+        )
+        if response_format is None:
+            return result if isinstance(result, str) else json.dumps(result)
+        return response_format.model_validate(result)
 
     def get_group(self) -> Any:
         class Group:

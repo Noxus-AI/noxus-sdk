@@ -1,7 +1,7 @@
 import builtins
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, TypeAlias
+from typing import TYPE_CHECKING, Literal, TypeAlias
 
 import aiofiles
 from pydantic import BaseModel, ConfigDict, Field
@@ -48,7 +48,10 @@ SourceType = Literal[
 RunID: TypeAlias = str
 
 
-def _prune(body: dict[str, Any]) -> dict[str, Any]:
+_Patch: TypeAlias = dict[str, str | builtins.list[str] | None]
+
+
+def _prune(body: _Patch) -> _Patch:
     """Drop unset fields so a PATCH only sends what the caller asked to change."""
     return {k: v for k, v in body.items() if v is not None}
 
@@ -175,6 +178,7 @@ class DocumentResult(BaseModel):
     doc_type: str | None = None
     doc_metadata: dict
     prefix: str
+    m_content_type: str | None = None
     m_source_type: str
     m_source_metadata: dict | None = None
 
@@ -184,6 +188,8 @@ class SearchResult(BaseModel):
     content: str
     source: str | None = None
     document_source: DocumentResult
+    node_id: str | None = None
+    page_label: str | None = None
 
 
 class CreateDocument(BaseModel):
@@ -229,14 +235,14 @@ class KnowledgeBase(BaseResource):
     def refresh(self) -> "KnowledgeBase":
         response = self.client.get(f"/v1/knowledge-bases/{self.id}")
         for key, value in response.items():
-            if hasattr(self, key):
+            if key in type(self).model_fields:
                 setattr(self, key, value)
         return self
 
     async def arefresh(self) -> "KnowledgeBase":
         response = await self.client.aget(f"/v1/knowledge-bases/{self.id}")
         for key, value in response.items():
-            if hasattr(self, key):
+            if key in type(self).model_fields:
                 setattr(self, key, value)
         return self
 
