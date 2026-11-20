@@ -22,7 +22,7 @@ agent = client.agents.create(name="Support Bot", settings=settings)
 `AgentSettings` fields: `model: list[str]`, `temperature: float`, `max_tokens`
 (default 64000), `tools: list[...]` (required — the discriminated tool union:
 web_research, kb_qa, workflow, code_execution, sandbox, …), `persona`, `tone`,
-`extra_instructions`, `agent_flow_id`.
+`extra_instructions`.
 
 ### CRUD & lifecycle
 

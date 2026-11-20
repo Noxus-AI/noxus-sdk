@@ -1,4 +1,3 @@
-from noxus_sdk.workflows.agentflow import AgentFlowDefinition
 from noxus_sdk.workflows.workflow import (
     ConfigError,
     NodeDefinition,
@@ -15,7 +14,6 @@ from noxus_sdk.workflows.workflow_v2 import (
 )
 
 __all__ = [
-    "AgentFlowDefinition",
     "WorkflowDefinition",
     "WorkflowDefinitionV2",
     "NodeV2",

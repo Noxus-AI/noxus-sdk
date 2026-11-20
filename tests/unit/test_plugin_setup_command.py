@@ -1,5 +1,3 @@
-"""Manifest carries the plugin's optional install-time setup command."""
-
 from __future__ import annotations
 
 from typing import ClassVar
@@ -49,11 +47,20 @@ class _PluginWithoutSetup(BasePlugin[_Config]):
         return [_Integration]
 
 
-def test_setup_command_round_trips_through_manifest() -> None:
-    manifest = _PluginWithSetup.get_manifest()
-    assert manifest.setup_command == "apt-get install -y -qq jq"
-    dumped = manifest.model_dump(mode="json")
-    assert dumped["setup_command"] == "apt-get install -y -qq jq"
+def test_class_setup_command_is_ignored() -> None:
+    assert _PluginWithSetup.get_manifest().setup_command is None
+
+
+def test_setup_command_round_trips_through_manifest_json() -> None:
+    manifest_json = _PluginWithoutSetup.get_manifest().model_copy(
+        update={"setup_command": "apt-get install -y -qq jq"}
+    )
+    manifest = _PluginWithoutSetup.get_manifest().with_sandbox_settings_of(
+        manifest_json
+    )
+    assert manifest.model_dump(mode="json")["setup_command"] == (
+        "apt-get install -y -qq jq"
+    )
 
 
 def test_setup_command_defaults_to_none() -> None:

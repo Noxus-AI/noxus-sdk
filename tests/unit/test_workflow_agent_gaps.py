@@ -104,7 +104,53 @@ def test_workflow_export_preview_omits_version_id_when_absent() -> None:
 
     _client(handler).workflows.export_preview("wf-1")
     assert captured["method"] == "GET"
-    assert captured["params"] == {}
+    assert captured["params"] == {"include_dependencies": "true"}
+
+
+def test_every_export_and_preview_passes_include_dependencies() -> None:
+    seen: list[tuple[str, dict]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.url.path, dict(request.url.params)))
+        return httpx.Response(200, json={"entities": []})
+
+    client = _client(handler)
+    client.workflows.export_preview("wf-1", include_dependencies=False)
+    client.agents.export_preview("ag-1", include_dependencies=False)
+    client.agents.export("ag-1", include_dependencies=False)
+    client.knowledge_bases.export("kb-1", include_dependencies=False)
+    client.processes.export_preview("pr-1", include_dependencies=False)
+    client.processes.export("pr-1", version="v4", include_dependencies=False)
+
+    assert [path for path, _ in seen] == [
+        "/v1/workflows/wf-1/export/preview",
+        "/v1/agents/ag-1/export/preview",
+        "/v1/agents/ag-1/export",
+        "/v1/knowledge-bases/kb-1/export",
+        "/v1/processes/pr-1/export/preview",
+        "/v1/processes/pr-1/export",
+    ]
+    assert all(params["include_dependencies"] == "false" for _, params in seen)
+    assert seen[-1][1]["version"] == "v4"
+
+
+@pytest.mark.asyncio
+async def test_async_exports_pass_include_dependencies() -> None:
+    seen: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(dict(request.url.params))
+        return httpx.Response(200, json={"entities": []})
+
+    client = _client(handler)
+    await client.agents.aexport("ag-1", include_dependencies=False)
+    await client.knowledge_bases.aexport("kb-1", include_dependencies=False)
+    await client.processes.aexport_preview("pr-1", include_dependencies=False)
+    await client.processes.aexport("pr-1", include_dependencies=False)
+    await client.workflows.aexport_preview("wf-1", include_dependencies=False)
+    await client.agents.aexport_preview("ag-1", include_dependencies=False)
+
+    assert [p["include_dependencies"] for p in seen] == ["false"] * 6
 
 
 def test_workflow_import_round_trips_bytes() -> None:

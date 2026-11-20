@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import contextlib
+import gc
 import json
 from typing import TYPE_CHECKING, Any
 
@@ -357,6 +358,38 @@ def test_response_frames_carry_no_origin():
     run(scenario())
 
 
+def test_call_retrieves_the_close_error_when_its_send_fails():
+    async def scenario():
+        contexts: list[dict] = []
+        asyncio.get_running_loop().set_exception_handler(
+            lambda _loop, ctx: contexts.append(ctx)
+        )
+        closed = asyncio.Event()
+
+        async def read_line() -> str | None:
+            await closed.wait()
+            return None
+
+        async def write_line(_line: str) -> None:
+            closed.set()
+            await reader  # the read loop hits EOF and fails pending calls
+            raise RuntimeError("websocket closed")
+
+        peer = JsonRpcPeer(read_line, write_line)
+        reader = asyncio.ensure_future(peer.run())
+        try:
+            await peer.call("ready")
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError("expected the send to fail")
+        gc.collect()
+
+        assert not contexts
+
+    run(scenario())
+
+
 def test_worker_unknown_node_maps_to_component_not_found():
     async def scenario():
         dispatcher = _dispatcher()
@@ -534,7 +567,7 @@ def test_manifest_splits_v1_and_v2_nodes():
     assert [n.type for n in manifest.nodes_v2] == ["EchoV2Node"]
 
 
-def test_manifest_rejects_non_positive_execution_slots():
+def test_manifest_rejects_non_positive_execution_slots_and_ignores_the_class():
     import pydantic
 
     manifest = ExamplePlugin.get_manifest()
@@ -549,10 +582,4 @@ def test_manifest_rejects_non_positive_execution_slots():
     class HeavyPlugin(ExamplePlugin):
         execution_slots = 3
 
-    assert HeavyPlugin.get_manifest().execution_slots == 3
-
-    class BrokenPlugin(ExamplePlugin):
-        execution_slots = 0
-
-    with pytest.raises(pydantic.ValidationError):
-        BrokenPlugin.get_manifest()
+    assert HeavyPlugin.get_manifest().execution_slots == 1

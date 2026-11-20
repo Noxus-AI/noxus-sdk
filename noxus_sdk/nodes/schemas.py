@@ -29,6 +29,14 @@ class NodeOutput(BaseModel):
     optional: bool
 
 
+class TimeoutPerUnit(BaseModel):
+    """A run budget that grows with a numeric config field: ``seconds`` per unit
+    of ``field`` (e.g. 10 seconds per document a node fetches)."""
+
+    field: str
+    seconds: float
+
+
 class NodeDefinition(BaseModel):
     inputs: list[NodeInput]
     outputs: list[NodeOutput]
@@ -57,6 +65,8 @@ class NodeDefinition(BaseModel):
     # generic host wrapper, so without this in the manifest the host would cap
     # every plugin call at its own default regardless of the node's declaration.
     max_timeout: float | None = None
+    # Replaces max_timeout when the node's config sets the field it scales with.
+    timeout_per_unit: TimeoutPerUnit | None = None
     visible: bool = True
     is_available: bool = True
     show_to_user: bool = True
