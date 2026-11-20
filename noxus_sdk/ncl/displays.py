@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from enum import Enum
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
-from pydantic import ConfigDict as PydanticConfigDict
+from pydantic import BaseModel, Field
 
 # ========================================
 # BASE CLASS
@@ -87,10 +85,6 @@ class ConfigToggleButton(BaseConfigDisplay):
     toggledIcon: str | None = None  # noqa: N815 - Bad legacy code..
 
 
-class ConfigFile(BaseConfigDisplay):
-    type: Literal["file"] = "file"  # type: ignore
-
-
 class ConfigFileArray(BaseConfigDisplay):
     type: Literal["file_array"] = "file_array"  # type: ignore
     can_select_multiple_files: bool = False
@@ -100,10 +94,6 @@ class ConfigFileArray(BaseConfigDisplay):
 
 class ConfigTimePicker(BaseConfigDisplay):
     type: Literal["time_picker"] = "time_picker"  # type: ignore
-
-
-class ConfigPhoneNumber(BaseConfigDisplay):
-    type: Literal["phone_number"] = "phone_number"  # type: ignore
 
 
 # ========================================
@@ -148,104 +138,10 @@ class ConfigMultiSelect(BaseConfigDisplay):
     max_options: int | None = None
 
 
-class ConfigTypeSelect(BaseConfigDisplay):
-    type: Literal["select_type"] = "select_type"  # type: ignore
-    values: list[Any]
-
-
-class ConfigConditionSelect(BaseConfigDisplay):
-    type: Literal["condition_select"] = "condition_select"  # type: ignore
-    connector_name: str
-    values: list[Any]
-
-
 class ConfigEnumSlider(BaseConfigDisplay):
     type: Literal["enum_slider"] = "enum_slider"  # type: ignore
     values: list[str]
     is_horizontal: bool = False
-
-
-class ConfigCoworkerSelect(BaseConfigDisplay):
-    type: Literal["coworker_select"] = "coworker_select"  # type: ignore
-    include_current_node: bool = False
-
-
-class ConfigUserSelector(BaseConfigDisplay):
-    type: Literal["user_selector"] = "user_selector"  # type: ignore
-    label: str = ""
-    placeholder: str | None = None
-
-
-class ConfigColorSelect(BaseConfigDisplay):
-    type: Literal["color_selector"] = "color_selector"  # type: ignore
-    values: list[str]
-    has_custom_color: bool | None = None
-    is_big: bool | None = False
-    preview: str | None = None
-
-
-# ========================================
-# MODEL & API COMPONENTS
-# ========================================
-
-
-class ConfigModelSelect(BaseConfigDisplay):
-    type: Literal["model_select"] = "model_select"  # type: ignore
-    endpoint: str
-    model_type: str
-    show_presets: bool = True
-    show_inline_presets: bool = True
-    layout: Literal["stacked", "side_by_side"] = "stacked"
-    hide_disabled_models: bool = True
-    model_config = PydanticConfigDict(protected_namespaces=())
-
-
-class ConfigModelToggle(BaseConfigDisplay):
-    type: Literal["model_toggle"] = "model_toggle"  # type: ignore
-    endpoint: str
-    model_type: str
-    model_config = PydanticConfigDict(protected_namespaces=())
-
-
-class ConfigProviderModelToggle(BaseConfigDisplay):
-    type: Literal["provider_model_toggle"] = "provider_model_toggle"  # type: ignore
-    provider: str
-    model: str
-    icon: str | None = None
-    icon_url: str | None = None
-
-    @model_validator(mode="after")
-    def _validate_icon(self) -> ConfigProviderModelToggle:
-        if self.icon is None and self.icon_url is None:
-            raise ValueError("Either icon or icon_url must be provided")
-        return self
-
-
-class ApiToggleState(str, Enum):
-    CONNECTED = "connected"
-    DISCONNECTED = "disconnected"
-    REQUESTING = "requesting"
-
-
-class ConfigApiToggle(BaseConfigDisplay):
-    type: Literal["api_toggle"] = "api_toggle"  # type: ignore
-    toggle_label: str
-
-
-class ConfigProviderApiToggle(ConfigApiToggle):
-    type: Literal["provider_api_toggle"] = "provider_api_toggle"  # type: ignore
-
-
-class ServiceAccountField(BaseConfigDisplay):
-    type: Literal["service_account"] = "service_account"  # type: ignore
-    name: str
-    key: str
-
-
-class APIKeyField(BaseConfigDisplay):
-    type: Literal["api_key"] = "api_key"  # type: ignore
-    name: str
-    key: str
 
 
 # ========================================
@@ -309,31 +205,9 @@ class ConfigRichTextVariablesAI(BaseConfigDisplay):
         return text_template
 
 
-class ConfigOutputSelector(BaseConfigDisplay):
-    type: Literal["output_selector"] = "output_selector"  # type: ignore
-    connector_name: str
-
-
-class ConfigVariableInputValue(BaseConfigDisplay):
-    type: Literal["variable_input_value"] = "variable_input_value"  # type: ignore
-    types: list[str]
-    hide_toolbar: bool = False
-
-
 # ========================================
 # DICTIONARY & COMPLEX DATA
 # ========================================
-
-
-class ConfigDisplayDict(BaseConfigDisplay):
-    type: Literal["config_dict"] = "config_dict"  # type: ignore
-    key_label: str
-    value_label: str
-
-
-class ConfigDictList(BaseConfigDisplay):
-    type: Literal["config_dict_list"] = "config_dict_list"  # type: ignore
-    keys: list[str]
 
 
 class ConfigDictEntry(BaseModel):
@@ -372,6 +246,15 @@ class ConfigTypeDictArray(BaseConfigDisplay):
     type: Literal["type_dict_array"] = "type_dict_array"  # type: ignore
     values: list[str]
     type_map: dict[str, str]
+
+
+class ConfigBindableDictRows(BaseConfigDisplay):
+    """Row editor for `dict[str, str]` fields: a name and a value per row.
+    `locked_rows=True` fixes the row names so users edit values only."""
+
+    type: Literal["config_bindable_dict_rows"] = "config_bindable_dict_rows"  # type: ignore
+    locked_rows: bool = False
+    empty_message: str | None = None
 
 
 # ========================================
@@ -419,104 +302,6 @@ class ConfigDynamicSelect(BaseConfigDisplay):
     is_searchable: bool = False
 
 
-class ConfigSearchBar(BaseConfigDisplay):
-    type: Literal["search_bar"] = "search_bar"  # type: ignore
-    search_endpoint: str
-
-
-class ConfigWorkflowVersion(BaseConfigDisplay):
-    type: Literal["config_workflow_version"] = "config_workflow_version"  # type: ignore
-
-
-class ConfigComplexCondition(BaseConfigDisplay):
-    type: Literal["config_complex_condition"] = "config_complex_condition"  # type: ignore
-
-
-class ConfigScrapeWebsiteList(BaseConfigDisplay):
-    type: Literal["config_scrape_website_list"] = "config_scrape_website_list"  # type: ignore
-
-
-# ========================================
-# THIRD-PARTY INTEGRATIONS
-# ========================================
-
-
-class GdriveFileType(str, Enum):
-    PDFS = "application/pdf"
-    DOCUMENTS = "application/pdf,text/plain,application/vnd.google-apps.document,application/vnd.google-apps.presentation,application/json"
-    GDOCUMENTS = "application/vnd.google-apps.document"
-    FOLDERS = "application/vnd.google-apps.folder"
-    SPREADSHEETS = "application/vnd.google-apps.spreadsheet"
-    ANY = "application/pdf,text/plain,application/vnd.google-apps.document,application/vnd.google-apps.presentation,application/json,application/vnd.google-apps.folder,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation"
-
-
-class ConfigGdrivePicker(BaseConfigDisplay):
-    model_config = PydanticConfigDict(use_enum_values=True)
-    type: Literal["gdrive_picker"] = "gdrive_picker"  # type: ignore
-    multi_select: bool = False
-    file_type: GdriveFileType | None = None
-    setIncludeFolders: bool = False  # noqa: N815 - Bad legacy code..
-
-
-class ConfigOneDrivePicker(BaseConfigDisplay):
-    model_config = PydanticConfigDict(use_enum_values=True)
-    type: Literal["onedrive_picker"] = "onedrive_picker"  # type: ignore
-    base_url: str | None = None
-    multi_select: bool = False
-    file_type: str | None = None
-    set_include_folders: bool = False
-    name: str = "OneDrive"
-
-
-# ========================================
-# TOOL & WORKFLOW COMPONENTS
-# ========================================
-
-ToolSections = Literal["QuickAction", "Flows", "Knowledge", "Nodes", "MCP", "Chatflow"]
-
-
-class ConfigToolsSelect(BaseConfigDisplay):
-    type: Literal["tools_select"] = "tools_select"  # type: ignore
-    quick_tools: list[str] | None = None
-    show_sections: list[ToolSections] = ["QuickAction", "Flows", "Knowledge"]
-
-
-class ConfigAgentMemoryField(BaseConfigDisplay):
-    """Renders the agent memory toggle + stored memories list."""
-
-    type: Literal["agent_memory_field"] = "agent_memory_field"  # type: ignore
-
-
-class ConfigBaseToolsField(BaseConfigDisplay):
-    """Renders a list of quick-action toggles with per-tool config."""
-
-    type: Literal["base_tools_field"] = "base_tools_field"  # type: ignore
-
-
-class ConfigKnowledgeBasesField(BaseConfigDisplay):
-    """Renders KB list with picker + per-tool NCL config."""
-
-    type: Literal["knowledge_bases_field"] = "knowledge_bases_field"  # type: ignore
-
-
-class ConfigWorkflowsField(BaseConfigDisplay):
-    """Renders workflow list with picker + per-tool NCL config."""
-
-    type: Literal["workflows_field"] = "workflows_field"  # type: ignore
-
-
-class ConfigCoworkersField(BaseConfigDisplay):
-    """Renders coworker list with picker + per-tool NCL config."""
-
-    type: Literal["coworkers_field"] = "coworkers_field"  # type: ignore
-
-
-class ConfigActionsField(BaseConfigDisplay):
-    """Renders action list with picker + per-tool NCL config."""
-
-    type: Literal["actions_field"] = "actions_field"  # type: ignore
-
-
 # ========================================
 # UI DISPLAY COMPONENTS (NON-INPUT)
 # ========================================
@@ -541,14 +326,6 @@ class ConfigTextDisplay(BaseConfigDisplay):
     small_text: str | None = None
 
 
-class ConfigPlaybookEditor(BaseConfigDisplay):
-    """Visual editor for browser automation playbooks."""
-
-    type: Literal["playbook_editor"] = "playbook_editor"  # type: ignore
-    show_recorder_button: bool = True
-    show_test_button: bool = True
-
-
 AnyConfigDisplay = Annotated[
     ConfigText
     | ConfigPassword
@@ -558,54 +335,28 @@ AnyConfigDisplay = Annotated[
     | ConfigNumberRange
     | ConfigToggle
     | ConfigToggleButton
-    | ConfigFile
     | ConfigFileArray
     | ConfigTimePicker
-    | ConfigPhoneNumber
     | ConfigSelect
     | ConfigChipsSelect
+    | ConfigMenuSelect
     | ConfigMultiSelect
-    | ConfigTypeSelect
-    | ConfigConditionSelect
     | ConfigEnumSlider
-    | ConfigCoworkerSelect
-    | ConfigUserSelector
-    | ConfigColorSelect
-    | ConfigModelSelect
-    | ConfigModelToggle
-    | ConfigProviderModelToggle
-    | ConfigApiToggle
     | ConfigChipsText
     | ConfigChipsListText
     | ConfigTextVariables
     | ConfigBigText
     | ConfigRichTextVariables
     | ConfigRichTextVariablesAI
-    | ConfigOutputSelector
-    | ConfigVariableInputValue
-    | ConfigDisplayDict
-    | ConfigDictList
     | ConfigDictComplexList
     | ConfigDictComplexListStandalone
     | ConfigDictListWithoutConnector
     | ConfigTypeDictArray
+    | ConfigBindableDictRows
     | ConfigDynamicText
     | ConfigDynamicSelect
-    | ConfigSearchBar
-    | ConfigWorkflowVersion
-    | ConfigComplexCondition
-    | ConfigScrapeWebsiteList
-    | ConfigGdrivePicker
-    | ConfigOneDrivePicker
-    | ConfigToolsSelect
-    | ConfigBaseToolsField
-    | ConfigKnowledgeBasesField
-    | ConfigWorkflowsField
-    | ConfigCoworkersField
-    | ConfigActionsField
     | ConfigDivider
     | ConfigBanner
-    | ConfigTextDisplay
-    | ConfigPlaybookEditor,
+    | ConfigTextDisplay,
     Field(discriminator="type"),
 ]

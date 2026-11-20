@@ -80,6 +80,30 @@ def test_list_and_delete_system_keys() -> None:
     assert admin.delete_system_key("sk-1") is True
 
 
+def test_listed_keys_come_without_their_value() -> None:
+    """Only the create call returns the key; listings carry its last four."""
+    listed = {k: v for k, v in _KEY.items() if k != "value"} | {"last_4_bytes": "abcd"}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[listed])
+
+    [key] = _client(handler).admin.list_system_keys()
+    assert key.value is None
+    assert key.last_4_bytes == "abcd"
+
+
+def test_the_listing_placeholder_is_not_a_key() -> None:
+    """The list sends value "" for SDKs that require the field; this one reads
+    it as no key, so nothing mistakes it for a real one."""
+    listed = _KEY | {"value": "", "last_4_bytes": "abcd"}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[listed])
+
+    [key] = _client(handler).admin.list_system_keys()
+    assert key.value is None
+
+
 def test_list_and_create_and_delete_roles() -> None:
     captured: dict = {}
 

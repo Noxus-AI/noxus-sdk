@@ -77,6 +77,17 @@ def email_attachment_filename(part: Message, index: int) -> str:
     return f"file{index}{ext}"
 
 
+def email_attachment_content_type(part: Message, name: str) -> str:
+    """The part's type, or one guessed from its name when the sender gave a
+    generic one (mail clients send .msg and .eml as application/octet-stream)."""
+    content_type = part.get_content_type()
+    if content_type != "application/octet-stream":
+        return content_type
+    if name.lower().endswith(".msg"):
+        return "application/vnd.ms-outlook"
+    return mimetypes.guess_type(name)[0] or content_type
+
+
 class Email(BaseModel):
     """A parsed email: headers, a markdown-ish body, and persisted attachments.
 
@@ -164,12 +175,13 @@ class Email(BaseModel):
                         _part = part.get_content()
                         if not isinstance(_part, bytes):
                             _part = str(_part).encode()
+                        name = email_attachment_filename(part, i)
                         coroutine_attachments.append(
                             File.from_bytes_internal_uri(
                                 ctx,
                                 _part,
-                                name=email_attachment_filename(part, i),
-                                content_type=part.get_content_type(),
+                                name=name,
+                                content_type=email_attachment_content_type(part, name),
                             )
                         )
             attachments = list(await asyncio.gather(*coroutine_attachments))

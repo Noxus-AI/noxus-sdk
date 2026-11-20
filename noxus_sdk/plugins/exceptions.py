@@ -19,3 +19,7 @@ class GitRepositoryNotFoundError(PluginSourceError):
 
 class ManifestNotFoundError(PluginSourceError):
     """Raised when manifest.json is not found in the plugin."""
+
+
+class InvalidPluginArchiveError(PluginSourceError):
+    """Raised when an uploaded plugin archive is corrupt or in an unsupported format."""

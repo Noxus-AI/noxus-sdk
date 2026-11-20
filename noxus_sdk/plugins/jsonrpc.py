@@ -126,6 +126,9 @@ class JsonRpcPeer:
             # Drop the entry on cancellation/timeout too, or a long-lived peer
             # accumulates dangling futures across repeated wait_for timeouts.
             self._pending.pop(msg_id, None)
+            # A failed send leaves fut unawaited: retrieve what the read loop set.
+            if fut.done() and not fut.cancelled():
+                fut.exception()
 
     async def notify(self, method: str, params: dict | None = None) -> None:
         """Send a notification (no response expected) — used for trigger events."""
