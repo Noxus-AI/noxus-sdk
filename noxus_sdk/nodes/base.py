@@ -13,6 +13,7 @@ from noxus_sdk.nodes.schemas import (
     NodeDefinition,
     NodeInput,
     NodeOutput,
+    TimeoutPerUnit,
 )
 from noxus_sdk.nodes.types import NodeCategory
 
@@ -57,6 +58,9 @@ class BaseNode(Generic[ConfigType]):
     config_class: type[ConfigType]
     # how much each node can take at maximum
     max_timeout = 240.0
+    # A budget that scales with a config field instead, e.g.
+    # TimeoutPerUnit(field="max_documents", seconds=10.0).
+    timeout_per_unit: TimeoutPerUnit | None = None
     parent_class: bool = False
 
     def __init_subclass__(cls) -> None:
@@ -173,6 +177,7 @@ class BaseNode(Generic[ConfigType]):
             integrations=list(cls.integrations.keys()),
             config_endpoint=f"/nodes/{cls.node_name}/config",
             max_timeout=cls.max_timeout,
+            timeout_per_unit=cls.timeout_per_unit,
             visible=cls.visible,
         )
 

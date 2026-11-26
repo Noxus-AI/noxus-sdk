@@ -8,13 +8,16 @@ import httpx
 import pytest
 
 from noxus_sdk.client import Client
-from noxus_sdk.resources.tables import Table, TableColumn
+from noxus_sdk.resources.tables import ImportColumn, RowFilter, Table, TableColumn
 
 _TABLE = {
     "id": "t-1",
     "name": "contacts",
+    "sql_name": "contacts",
     "description": None,
-    "columns": [{"name": "email", "type": "text", "label": None}],
+    "id_type": "autoincrement",
+    "source": "custom",
+    "columns": [{"name": "email", "type": "string", "label": None}],
     "row_count": 2,
 }
 
@@ -46,7 +49,7 @@ def test_create_table_sends_columns_and_id_type() -> None:
 
     table = _client(handler).tables.create(
         "contacts",
-        columns=[TableColumn(name="email", type="text")],
+        columns=[TableColumn(name="email", type="string")],
         description="people",
     )
     assert captured["path"] == "/v1/tables"
@@ -54,9 +57,11 @@ def test_create_table_sends_columns_and_id_type() -> None:
     assert captured["body"]["id_type"] == "uuid"
     assert captured["body"]["description"] == "people"
     assert captured["body"]["columns"] == [
-        {"name": "email", "type": "text", "label": None}
+        {"name": "email", "type": "string", "label": None}
     ]
     assert table.name == "contacts"
+    assert table.sql_name == "contacts"
+    assert table.id_type == "autoincrement"
     assert "contacts" in repr(table)
 
 
@@ -184,6 +189,127 @@ def test_add_and_drop_column() -> None:
     }
     assert "POST /v1/tables/t-1/columns" in captured["paths"]
     assert "DELETE /v1/tables/t-1/columns/age" in captured["paths"]
+
+
+def test_list_rows_page_sends_sort_and_filters_and_returns_total() -> None:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["params"] = dict(request.url.params)
+        return httpx.Response(
+            200, json={"rows": [{"id": "r1"}], "limit": 10, "offset": 0, "total": 42}
+        )
+
+    page = _table(handler).list_rows_page(
+        limit=10,
+        order_by="score",
+        descending=True,
+        filters=[RowFilter(field="score", op="between", value=1, value2=5)],
+    )
+    assert captured["params"]["order_by"] == "score"
+    assert captured["params"]["descending"] == "true"
+    assert json.loads(captured["params"]["filters"]) == [
+        {"field": "score", "op": "between", "value": 1, "value2": 5}
+    ]
+    assert page.total == 42
+    assert page.rows == [{"id": "r1"}]
+
+
+def test_export_csv_sends_search_and_filters() -> None:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["params"] = dict(request.url.params)
+        return httpx.Response(200, content=b"a\n")
+
+    _table(handler).export_csv(
+        search="x", filters=[RowFilter(field="tag", op="in", value=["a", "b"])]
+    )
+    assert captured["params"]["search"] == "x"
+    assert json.loads(captured["params"]["filters"])[0]["value"] == ["a", "b"]
+
+
+def test_query_pages_and_returns_total() -> None:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = _body(request)
+        return httpx.Response(
+            200, json={"columns": ["n"], "rows": [{"n": 1}], "total": 9}
+        )
+
+    result = _client(handler).tables.query(
+        "select n from t", limit=1, offset=3, include_total=False
+    )
+    assert captured["body"] == {
+        "sql": "select n from t",
+        "limit": 1,
+        "offset": 3,
+        "include_total": False,
+    }
+    assert result.total == 9
+
+
+def test_column_reorder_type_and_label_requests() -> None:
+    calls: list[tuple[str, str, dict]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append((request.method, request.url.path, _body(request)))
+        return httpx.Response(200, json=_TABLE)
+
+    table = _table(handler)
+    table.reorder_columns(["email", "age"])
+    table.change_column_type("age", "string")
+    table.set_column_label("age", "Age")
+    assert calls == [
+        ("PATCH", "/v1/tables/t-1/columns/reorder", {"column_names": ["email", "age"]}),
+        ("PATCH", "/v1/tables/t-1/columns/age/type", {"new_type": "string"}),
+        ("PATCH", "/v1/tables/t-1/columns/age/label", {"label": "Age"}),
+    ]
+
+
+def test_import_xlsx_sends_spreadsheet_type_and_sheet(tmp_path) -> None:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["content"] = request.read()
+        return httpx.Response(200, json=_TABLE)
+
+    path = tmp_path / "people.xlsx"
+    path.write_bytes(b"PK")
+    _client(handler).tables.import_csv(
+        path,
+        "people",
+        [ImportColumn(index=0, name="email", type="string")],
+        sheet="Q3",
+        skip_rows=2,
+    )
+    assert b"spreadsheetml.sheet" in captured["content"]
+    assert b'"sheet":"Q3"' in captured["content"]
+    assert b'"skip_rows":2' in captured["content"]
+
+
+def test_import_csv_sends_file_and_spec(tmp_path) -> None:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["path"] = request.url.path
+        captured["content"] = request.read()
+        return httpx.Response(200, json=_TABLE)
+
+    path = tmp_path / "people.csv"
+    path.write_bytes(b"email\na@b.com\n")
+    _client(handler).tables.import_csv(
+        path,
+        "people",
+        [ImportColumn(index=0, name="email", type="string")],
+        id_type="autoincrement",
+    )
+    assert captured["path"] == "/v1/tables/import"
+    assert b'filename="people.csv"' in captured["content"]
+    assert b"a@b.com" in captured["content"]
+    assert b'"id_type":"autoincrement"' in captured["content"]
+    assert b'"name":"people"' in captured["content"]
 
 
 @pytest.mark.asyncio

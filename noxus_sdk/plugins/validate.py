@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from contextlib import contextmanager
 from importlib import import_module
@@ -8,7 +9,8 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from noxus_sdk.plugins import BasePlugin, PluginManifest
+from noxus_sdk.plugins import BasePlugin, PluginManifest, PluginSandboxSettings
+from noxus_sdk.plugins.manifest import MANIFEST_FILENAME
 from noxus_sdk.schemas import ValidationResult
 
 if TYPE_CHECKING:
@@ -143,30 +145,61 @@ def discover_and_load_plugin(
     return plugin_class, ValidationResult(valid=True, errors=errors, warnings=warnings)
 
 
+def _declares(plugin_class: type[BasePlugin], attribute: str) -> bool:
+    return any(
+        attribute in vars(cls)
+        for cls in plugin_class.__mro__[: plugin_class.__mro__.index(BasePlugin)]
+    )
+
+
+def _ignored_class_settings(plugin_class: type[BasePlugin]) -> list[str]:
+    warnings = []
+    if _declares(plugin_class, "execution_slots"):
+        warnings.append(
+            f"{plugin_class.__name__}.execution_slots is deprecated and ignored: set "
+            f'"execution_slots": {plugin_class.execution_slots} in {MANIFEST_FILENAME} instead.'
+        )
+    if _declares(plugin_class, "setup_command"):
+        warnings.append(
+            f"{plugin_class.__name__}.setup_command is deprecated and ignored: set "
+            f'"setup_command" in {MANIFEST_FILENAME} instead.'
+        )
+    return warnings
+
+
 def validate_plugin(path: Path) -> tuple[PluginManifest | None, ValidationResult]:
     """Validate everything in the plugin to ensure it properly implements the plugin interface"""
 
-    # First discover and load the plugin class
     plugin_class, discovery_result = discover_and_load_plugin(path)
 
     if discovery_result.errors or plugin_class is None:
         return None, discovery_result
 
-    # Generate manifest from class
-    manifest = None
-    validation_errors = []
+    errors = list(discovery_result.errors or [])
+    warnings = [
+        *(discovery_result.warnings or []),
+        *_ignored_class_settings(plugin_class),
+    ]
 
     try:
         manifest = plugin_class.get_manifest()
     except Exception as e:  # noqa: BLE001 - If the plugin manifest generation code fails, we want to return a validation result with the error. We dont control the code so need to catch all exceptions.
-        validation_errors.append(f"Failed to generate manifest: {e}")
+        errors.append(f"Failed to generate manifest: {e}")
+        return None, ValidationResult(valid=True, errors=errors, warnings=warnings)
 
-    # Combine results
-    all_errors = (discovery_result.errors or []) + validation_errors
-    all_warnings = discovery_result.warnings or []
+    manifest_path = path / MANIFEST_FILENAME
+    if manifest_path.exists():
+        try:
+            manifest_json = json.loads(manifest_path.read_text())
+            settings = PluginSandboxSettings.model_validate(manifest_json)
+        except (OSError, ValueError) as e:
+            errors.append(f"{MANIFEST_FILENAME} is invalid: {e}")
+        else:
+            manifest = manifest.with_sandbox_settings_of(settings)
+            if manifest.model_dump(mode="json") != manifest_json:
+                warnings.append(
+                    f"{MANIFEST_FILENAME} is out of date with the plugin code: "
+                    "run `noxus plugin generate-manifest`."
+                )
 
-    return manifest, ValidationResult(
-        valid=True,
-        errors=all_errors,
-        warnings=all_warnings,
-    )
+    return manifest, ValidationResult(valid=True, errors=errors, warnings=warnings)

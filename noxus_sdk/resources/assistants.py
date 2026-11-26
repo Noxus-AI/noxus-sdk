@@ -95,12 +95,26 @@ class Agent(BaseResource):
 
 
 class AgentService(BaseService[Agent]):
-    async def alist(self) -> list[Agent]:
-        results = await self.client.apget("/v1/agents")
+    async def alist(
+        self, page: int = 1, page_size: int = 10, query: str | None = None
+    ) -> list[Agent]:
+        results = await self.client.apget(
+            "/v1/agents",
+            params={"query": query} if query else None,
+            page=page,
+            page_size=page_size,
+        )
         return [Agent(client=self.client, **result) for result in results]
 
-    def list(self) -> list[Agent]:
-        results = self.client.pget("/v1/agents")
+    def list(
+        self, page: int = 1, page_size: int = 10, query: str | None = None
+    ) -> list[Agent]:
+        results = self.client.pget(
+            "/v1/agents",
+            params={"query": query} if query else None,
+            page=page,
+            page_size=page_size,
+        )
         return [Agent(client=self.client, **result) for result in results]
 
     def create(self, name: str, settings: AgentSettings) -> Agent:
@@ -211,14 +225,28 @@ class AgentService(BaseService[Agent]):
         return await self.client.aget("/v1/agents/tool-schemas")
 
     # ── export / import ────────────────────────────────────────────────
-    def export_preview(self, agent_id: str, version_id: str | None = None) -> dict:
-        params = {"version_id": version_id} if version_id else {}
+    def export_preview(
+        self,
+        agent_id: str,
+        version_id: str | None = None,
+        *,
+        include_dependencies: bool = True,
+    ) -> dict:
+        params: dict = {"include_dependencies": include_dependencies}
+        if version_id:
+            params["version_id"] = version_id
         return self.client.get(f"/v1/agents/{agent_id}/export/preview", params=params)
 
     async def aexport_preview(
-        self, agent_id: str, version_id: str | None = None
+        self,
+        agent_id: str,
+        version_id: str | None = None,
+        *,
+        include_dependencies: bool = True,
     ) -> dict:
-        params = {"version_id": version_id} if version_id else {}
+        params: dict = {"include_dependencies": include_dependencies}
+        if version_id:
+            params["version_id"] = version_id
         return await self.client.aget(
             f"/v1/agents/{agent_id}/export/preview", params=params
         )
@@ -228,10 +256,12 @@ class AgentService(BaseService[Agent]):
         version: ExportFormat,
         version_id: str | None,
         set_active_on_import: bool,
+        include_dependencies: bool,
     ) -> dict:
         params: dict = {
             "version": version,
             "set_active_on_import": set_active_on_import,
+            "include_dependencies": include_dependencies,
         }
         if version_id:
             params["version_id"] = version_id
@@ -244,12 +274,18 @@ class AgentService(BaseService[Agent]):
         version: ExportFormat = "auto",
         version_id: str | None = None,
         set_active_on_import: bool = False,
+        include_dependencies: bool = True,
     ) -> bytes:
-        """Export an agent bundle (``auto`` = legacy base64, ``v4`` = .nx YAML)."""
+        """Export an agent bundle (``auto`` = legacy base64, ``v4`` = .nx YAML).
+
+        ``include_dependencies`` bundles the flows, knowledge bases and files it
+        references."""
         response = self.client._request(
             "POST",
             f"/v1/agents/{agent_id}/export",
-            params=self._export_params(version, version_id, set_active_on_import),
+            params=self._export_params(
+                version, version_id, set_active_on_import, include_dependencies
+            ),
         )
         return response.content
 
@@ -260,11 +296,14 @@ class AgentService(BaseService[Agent]):
         version: ExportFormat = "auto",
         version_id: str | None = None,
         set_active_on_import: bool = False,
+        include_dependencies: bool = True,
     ) -> bytes:
         response = await self.client._arequest(
             "POST",
             f"/v1/agents/{agent_id}/export",
-            params=self._export_params(version, version_id, set_active_on_import),
+            params=self._export_params(
+                version, version_id, set_active_on_import, include_dependencies
+            ),
         )
         return response.content
 

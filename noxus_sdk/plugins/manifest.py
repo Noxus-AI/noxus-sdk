@@ -14,7 +14,25 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-class PluginManifest(BaseModel):
+MANIFEST_FILENAME = "manifest.json"
+
+
+class PluginSandboxSettings(BaseModel):
+    """The part of a manifest read before the sandbox exists, so only ever
+    from manifest.json, never from the plugin class."""
+
+    # Sandbox budget for the plugin's warm worker, in manager slots (one slot =
+    # 1/8 CPU core + 256 MiB). Plugins are light, so one by default.
+    execution_slots: int = Field(default=1, ge=1)
+
+    # Optional shell command the platform runs inside the plugin's sandbox
+    # once at provision time, after the dependency install (e.g. installing
+    # system packages or CLI tools the nodes shell out to). Non-zero exit
+    # fails the install. Must be idempotent: re-provisioning re-runs it.
+    setup_command: str | None = None
+
+
+class PluginManifest(PluginSandboxSettings):
     """Complete plugin specification combining manifest and spec"""
 
     # Core plugin metadata
@@ -36,15 +54,6 @@ class PluginManifest(BaseModel):
     execution: Literal["runtime", "docker", "remote"] = "runtime"
     image: str | None = None
     endpoint: str | None = None
-    # Sandbox budget for the plugin's warm worker, in manager slots (one slot =
-    # 1/8 CPU core + 256 MiB). Plugins are light, so one by default.
-    execution_slots: int = Field(default=1, ge=1)
-
-    # Optional shell command the platform runs inside the plugin's sandbox
-    # once at provision time, after the dependency install (e.g. installing
-    # system packages or CLI tools the nodes shell out to). Non-zero exit
-    # fails the install. Must be idempotent: re-provisioning re-runs it.
-    setup_command: str | None = None
 
     # Plugin components. V1 and V2 nodes are kept as separate entities: a V1
     # node renders/wires with edge connectors, a V2 node with bindable config
@@ -60,3 +69,13 @@ class PluginManifest(BaseModel):
         """Load plugin manifest from a file"""
         with open(file_path) as f:
             return cls.model_validate_json(f.read())
+
+    def with_sandbox_settings_of(
+        self, settings: PluginSandboxSettings
+    ) -> PluginManifest:
+        return self.model_copy(
+            update={
+                "execution_slots": settings.execution_slots,
+                "setup_command": settings.setup_command,
+            }
+        )

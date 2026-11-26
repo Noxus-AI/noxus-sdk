@@ -87,7 +87,7 @@ def generate_manifest(
 
     output_path = Path(path) / "manifest.json"
 
-    manifest, result = validate(path)
+    manifest, result = validate(path, strict=False)
 
     if not manifest or result.errors:
         raise typer.Exit(code=1)

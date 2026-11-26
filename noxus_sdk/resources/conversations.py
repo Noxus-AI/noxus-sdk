@@ -139,34 +139,6 @@ class ActionTool(ConversationTool):
     type: Literal["action"] = "action"
 
 
-class ChatflowTool(ConversationTool):
-    """Tool for chatflow execution"""
-
-    model_config = ConfigDict(extra="allow")
-    type: Literal["chatflow"] = "chatflow"
-
-
-class FlowTransitionTool(ConversationTool):
-    """Tool for flow transitions"""
-
-    model_config = ConfigDict(extra="allow")
-    type: Literal["flow_transition"] = "flow_transition"
-
-
-class ChatflowExtractionTool(ConversationTool):
-    """Tool for chatflow extraction"""
-
-    model_config = ConfigDict(extra="allow")
-    type: Literal["chatflow_extraction"] = "chatflow_extraction"
-
-
-class ChatflowTransitionTool(ConversationTool):
-    """Tool for chatflow transitions"""
-
-    model_config = ConfigDict(extra="allow")
-    type: Literal["chatflow_transition"] = "chatflow_transition"
-
-
 class SandboxTool(ConversationTool):
     """Tool that provides sandboxed file and shell operations"""
 
@@ -268,10 +240,6 @@ KnownToolSettings = Annotated[
     | CodeExecutionTool
     | AgentTool
     | ActionTool
-    | ChatflowTool
-    | FlowTransitionTool
-    | ChatflowExtractionTool
-    | ChatflowTransitionTool
     | SandboxTool
     | ScheduleTool
     | TodosTool
@@ -327,7 +295,6 @@ class ConversationSettings(BaseModel):
     persona: str | None = None
     tone: str | None = None
     extra_instructions: str | None = None
-    agent_flow_id: str | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -614,6 +581,7 @@ class ConversationService(BaseService[Conversation]):
         name: str,
         settings: ConversationSettings | None = None,
         agent_id: str | None = None,
+        preview: bool = False,
     ) -> Conversation:
         if (settings is None and agent_id is None) or (
             settings is not None and agent_id is not None
@@ -625,7 +593,11 @@ class ConversationService(BaseService[Conversation]):
             params["assistant_id"] = agent_id
 
         # Match CreateConversation schema
-        req = {"name": name, "settings": settings.model_dump() if settings else None}
+        req = {
+            "name": name,
+            "settings": settings.model_dump() if settings else None,
+            "preview": preview,
+        }
 
         result = self.client.post(
             "/v1/conversations",
@@ -639,6 +611,7 @@ class ConversationService(BaseService[Conversation]):
         name: str,
         settings: ConversationSettings | None = None,
         agent_id: str | None = None,
+        preview: bool = False,
     ) -> Conversation:
         if (settings is None and agent_id is None) or (
             settings is not None and agent_id is not None
@@ -650,7 +623,11 @@ class ConversationService(BaseService[Conversation]):
             params["assistant_id"] = agent_id
 
         # Match CreateConversation schema
-        req = {"name": name, "settings": settings.model_dump() if settings else None}
+        req = {
+            "name": name,
+            "settings": settings.model_dump() if settings else None,
+            "preview": preview,
+        }
 
         result = await self.client.apost(
             "/v1/conversations",

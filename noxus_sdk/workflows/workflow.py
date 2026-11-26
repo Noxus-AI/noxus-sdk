@@ -354,9 +354,9 @@ class Node(BaseModel):
             if key not in connector_keys:
                 connector_keys.append(key)
             if output.type == "variable_type_size_connector":
-                assert (
-                    type_definition is not None
-                ), f"type_definition is required for variable_type_size_connector ({self.type}.{name})"
+                assert type_definition is not None, (
+                    f"type_definition is required for variable_type_size_connector ({self.type}.{name})"
+                )
                 type_definitions = connector_outputs[name].get("type_definitions", {})
                 choices = connector_outputs[name].get("choices", [])
                 if key not in type_definitions:
@@ -628,15 +628,7 @@ class WorkflowDefinition(BaseModel):
         return await self.client.workflows.alist_versions(self.id)
 
     def verify_name_legal(self, name):
-        assert name not in [
-            "AgentStartNode",
-            "AgentEndNode",
-            "AgentMessageSendNode",
-            "ChoiceAgentNode",
-            "FormExtractionAgentNode",
-            "BasicAgentNode",
-            "ChatAgentNode",
-        ]
+        assert name != "BasicAgentNode"
 
     def node(self, name) -> "Node":
         self.verify_name_legal(name)
