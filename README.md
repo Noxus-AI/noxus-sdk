@@ -1007,10 +1007,14 @@ accurate, example-driven guidance for scripting the platform.
 
 ### Plugin resources
 
-Set `execution_slots = 1` on your `BasePlugin` subclass (the default). Each slot
-provides 1/8 CPU core and 256 MiB of memory. `noxus plugin generate-manifest`
-includes the count and `noxus plugin validate` reports it. Regenerate and
-reinstall after changing it. Installation uses at least 4 slots (1 GiB), then
-shrinks to the declared count once the worker starts. A larger declared count
-also increases the install budget. If an install or worker is killed for memory
-use, raise `execution_slots` or reduce memory use in the reported step.
+Set `"execution_slots"` in `manifest.json` (default 1). Each slot provides 1/8 CPU
+core and 256 MiB of memory. The platform reads it from `manifest.json` before the
+sandbox exists, so it never comes from the plugin class. `BasePlugin.execution_slots`
+and `BasePlugin.setup_command` are deprecated and ignored, and `noxus plugin validate`
+warns when a class sets them. `noxus plugin generate-manifest` keeps the
+`execution_slots` and `setup_command` already in `manifest.json`, and `validate`
+reports the count. Reinstall after changing it. Installation uses at least 4 slots
+(1 GiB), then shrinks to the declared count once the worker starts. A larger
+declared count also increases the install budget. If an install or worker is
+killed for memory use, raise `execution_slots` or reduce memory use in the reported
+step.

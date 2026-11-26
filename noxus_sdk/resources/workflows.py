@@ -187,17 +187,31 @@ class WorkflowService(BaseService[WorkflowDefinition]):
         return await self.client.aget(f"/v1/workflows/{workflow_id}/logs/columns")
 
     # ── export / import ────────────────────────────────────────────────
-    def export_preview(self, workflow_id: str, version_id: str | None = None) -> dict:
+    def export_preview(
+        self,
+        workflow_id: str,
+        version_id: str | None = None,
+        *,
+        include_dependencies: bool = True,
+    ) -> dict:
         """What an export would contain, without producing the bundle."""
-        params = {"version_id": version_id} if version_id else {}
+        params: dict = {"include_dependencies": include_dependencies}
+        if version_id:
+            params["version_id"] = version_id
         return self.client.get(
             f"/v1/workflows/{workflow_id}/export/preview", params=params
         )
 
     async def aexport_preview(
-        self, workflow_id: str, version_id: str | None = None
+        self,
+        workflow_id: str,
+        version_id: str | None = None,
+        *,
+        include_dependencies: bool = True,
     ) -> dict:
-        params = {"version_id": version_id} if version_id else {}
+        params: dict = {"include_dependencies": include_dependencies}
+        if version_id:
+            params["version_id"] = version_id
         return await self.client.aget(
             f"/v1/workflows/{workflow_id}/export/preview", params=params
         )
